@@ -207,7 +207,7 @@ public class PantryPalController
      * @param instructions ordered cooking steps
      * @param prepTimeMinutes prep time, or null if unknown
      * @param cookTimeMinutes cook time, or null if unknown
-     * @param effort effort category; null disables a filter
+     * @param effort required effort category; UNKNOWN is allowed
      * @return an independent snapshot of the new recipe
      * @throws IOException as defined by the class reference error contract
      */

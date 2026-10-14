@@ -1,12 +1,20 @@
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Frame;
+import java.awt.GraphicsEnvironment;
+import java.awt.event.WindowEvent;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
+import javax.swing.JFrame;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
+import org.junit.Assume;
 import student.TestCase;
 
 /**
@@ -425,6 +433,139 @@ public class PantryPalGUITest extends TestCase
             assertTrue(message().contains("Meal Roulette picked: Rice bowl"));
             assertEquals("Ready",
                 table("comparisonTable").getValueAt(0, 5));
+        });
+    }
+
+
+    /**
+     * Scoped quantity/name errors display their specified recovery messages.
+     * @throws Exception if the EDT operation fails unexpectedly
+     */
+    public void testExactSpecificationMessages()
+        throws Exception
+    {
+        SwingUtilities.invokeAndWait(() ->
+        {
+            String finiteMessage = "Enter a finite quantity greater than 0 "
+                + "and no greater than 1,000,000.";
+            String[][] cases = {
+                { "Rice", "abc", "Enter a valid number." },
+                { "Rice", "0", "Quantity must be greater than 0." },
+                { "Rice", "-1", "Quantity must be greater than 0." },
+                { "Rice", "1000001", finiteMessage },
+                { "Rice", "NaN", finiteMessage },
+                { "Rice", "Infinity", finiteMessage },
+                { "Rice", "-Infinity", finiteMessage },
+                { "Rice", "9".repeat(1000), finiteMessage },
+                { "", "1", "Enter a valid ingredient name." },
+                { "123!@", "1", "Enter a valid ingredient name." },
+                { "Rice" + (char)1, "1", "Enter a valid ingredient name." },
+                { "x".repeat(101), "1",
+                    "Ingredient names cannot exceed 100 characters." } };
+            for (String[] values : cases)
+            {
+                addPantry(values[0], values[1], "cup");
+                assertEquals("Please try again: " + values[2], message());
+                assertEquals(0, controller.getPantryIngredients().length);
+                assertFalse(controller.hasUnsavedChanges());
+                assertEquals(values[0], field("pantryName").getText());
+                assertEquals(values[1], field("pantryQuantity").getText());
+            }
+            addPantry("Rice", "2", "cup");
+            assertEquals(1, controller.getPantryIngredients().length);
+            set("pantryQuery", "absent");
+            click("pantrySearch");
+            assertEquals("No ingredients found.", message());
+        });
+    }
+
+
+    /**
+     * An entry removed since display gets the specified not-found response.
+     * @throws Exception if the test operation fails unexpectedly
+     */
+    public void testStalePantryActions()
+        throws Exception
+    {
+        SwingUtilities.invokeAndWait(() -> addPantry("Rice", "2", "cup"));
+        String removedId = controller.getPantryIngredients()[0].getId();
+        SwingUtilities.invokeAndWait(() ->
+            table("pantryTable").setRowSelectionInterval(0, 0));
+        controller.removePantryIngredient(removedId);
+        controller.addPantryIngredient("Salt", 1, Unit.GRAM);
+        SwingUtilities.invokeAndWait(() ->
+        {
+            click("pantryRemove");
+            assertEquals("Please try again: Ingredient not found.", message());
+            assertEquals("Salt",
+                controller.getPantryIngredients()[0].getName());
+            table("pantryTable").setRowSelectionInterval(0, 0);
+        });
+        String saltId = controller.getPantryIngredients()[0].getId();
+        controller.removePantryIngredient(saltId);
+        controller.addPantryIngredient("Beans", 3, Unit.CUP);
+        SwingUtilities.invokeAndWait(() ->
+        {
+            set("pantryQuantity", "9");
+            click("pantryUpdate");
+            assertEquals("Please try again: Ingredient not found.", message());
+            assertEquals(3.0,
+                controller.getPantryIngredients()[0].getQuantity(), 0.0);
+            assertEquals("Beans",
+                controller.getPantryIngredients()[0].getName());
+        });
+    }
+
+
+    /**
+     * The real entry point opens a window, and an unchanged session can close.
+     * @throws Exception if Swing startup or disposal fails
+     */
+    public void testDesktopEntryPoint()
+        throws Exception
+    {
+        Assume.assumeFalse("A desktop display is required for this test.",
+            GraphicsEnvironment.isHeadless());
+        Set<Frame> existing = new HashSet<Frame>(
+            Arrays.asList(Frame.getFrames()));
+        PantryPalGUI.main(new String[0]);
+        SwingUtilities.invokeAndWait(() ->
+        {
+            JFrame opened = null;
+            try
+            {
+                for (Frame candidate : Frame.getFrames())
+                {
+                    if (!existing.contains(candidate)
+                        && candidate instanceof JFrame
+                        && ((JFrame)candidate).getContentPane()
+                            instanceof PantryPalGUI)
+                    {
+                        opened = (JFrame)candidate;
+                        break;
+                    }
+                }
+                if (opened == null)
+                {
+                    throw new AssertionError(
+                        "main must open the desktop application.");
+                }
+                assertTrue(opened.isShowing());
+                assertEquals("PantryPal - Session prototype",
+                    opened.getTitle());
+                assertEquals(0, ((JTable)find(opened, "pantryTable"))
+                    .getRowCount());
+                opened.dispatchEvent(new WindowEvent(opened,
+                    WindowEvent.WINDOW_CLOSING));
+                assertFalse(opened.isDisplayable());
+            }
+            finally
+            {
+                if (opened != null)
+                {
+                    opened.dispose();
+                }
+            }
         });
     }
 

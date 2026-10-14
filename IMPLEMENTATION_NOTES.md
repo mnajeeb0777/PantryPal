@@ -358,8 +358,9 @@ Neither it nor any other supplied chain method was modified.
 
 Tests extend student.TestCase using the installed course JUnit 4.12 library.
 Implemented core operations are exercised with normal and invalid or boundary
-scenarios. Configured persistence/external-service paths and native window
-startup/close-dialog interaction remain outside the automated coverage.
+scenarios. Configured persistence/external-service paths and the changed-session
+close confirmation dialog remain outside the automated coverage. Normal native
+window startup and closing an unchanged session are now tested through main.
 For no-argument getters, boundary values, empty collections,
 copy isolation, and constructor rejection cover applicable invalid-state risks;
 there are no getter input parameters to reject.
@@ -371,9 +372,11 @@ known shortages, excess stock, invalid/empty match arrays, and snapshot isolatio
 RecipeMatcher tests cover capped allocations, repeated/aliased requirements,
 multi-entry conversions, mixed/incompatible units, depleted stock, input/output
 isolation, integration with Pantry and RecipeBook, and deduction parity.
-The full suite passes 110 tests after Meal Roulette: the existing
-81 plus 16 controller tests and 13 GUI tests. GUI tests create actual Swing
+The full suite passes 113 tests after the Deliverable 3 audit: the existing
+81 plus 16 controller tests and 16 GUI tests. Most GUI tests create actual Swing
 controls on the EDT and click their buttons without opening desktop windows.
+The desktop entry-point test briefly opens and closes its own window. It reports
+an assumption skip on headless hosts; it executed on this Windows machine.
 They cover pantry CRUD, sorting/selection identity, recipe creation and draft
 recovery, combined filters, statuses, cooking, and invalid-input recovery.
 All 18 source files compile with JDK 17 and Java 11 source/API compatibility.
@@ -386,6 +389,18 @@ Java 17 SecurityManager deprecation warning during otherwise successful tests.
 The three tabs were also rendered offscreen and visually inspected at two
 widths. Render artifacts and the temporary preview harness are ignored under
 build/. This checks component layout, not native window-manager behavior.
+
+The audit is recorded in DELIVERABLE_3_AUDIT.md, including a criterion matrix,
+public-method/test trace, exact bad-input responses, and remaining exclusions.
+The clean audit run compiled into new output directories and executed all 113
+tests with zero failures, ignored tests, or assumption skips. It found and fixed
+one message mismatch: negative infinity now uses the same nonfinite/range
+message as NaN and positive infinity. Finite negatives and zero keep their
+specified positive-quantity message. New GUI tests also verify stale selection
+recovery and exact field-error messages, with no mutation after rejection.
+The addCustomRecipe effort Javadoc was corrected to describe its existing
+nonnull requirement rather than the filter method's optional-effort behavior.
+No new architecture or features were added during the audit.
 
 | File(s) | Contribution in this increment |
 | --- | --- |
@@ -404,7 +419,9 @@ build/. This checks component layout, not native window-manager behavior.
 | src/PantryPalController.java | Codex/GenAI implemented session coordination, optional-service guards, and Meal Roulette; user approved session-only storage and the stretch feature |
 | src/PantryPalGUI.java | Codex/GenAI designed and implemented the user-approved Swing prototype, input recovery, session-loss warning, and Meal Roulette action |
 | test/PantryPalControllerTest.java | Codex/GenAI authored 16 session, ownership, validation, cooking, unavailable-service, and Meal Roulette tests |
-| test/PantryPalGUITest.java | Codex/GenAI authored 13 EDT-based tests using actual Swing controls, including roulette selection and recovery |
+| test/PantryPalGUITest.java | Codex/GenAI authored 16 tests using actual Swing controls, including roulette, exact specified error messages, stale selection recovery, and native startup |
+| src/Ingredient.java | Codex/GenAI corrected nonfinite-quantity message precedence during the rubric audit |
+| DELIVERABLE_3_AUDIT.md | Codex/GenAI recorded rubric findings, method/test evidence, verified behavior, and exclusions |
 | scripts/run.ps1 | Codex/GenAI added a launcher using the existing course-compatible toolchain |
 | IMPLEMENTATION_NOTES.md | Codex/GenAI recorded the approved decision, implementation details, and limits |
 

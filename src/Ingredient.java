@@ -216,16 +216,16 @@ public class Ingredient
      */
     private static void validateQuantity(double quantity)
     {
-        if (quantity <= 0)
-        {
-            throw new IllegalArgumentException(
-                "Quantity must be greater than 0.");
-        }
         if (!Double.isFinite(quantity) || quantity > 1000000)
         {
             throw new IllegalArgumentException(
                 "Enter a finite quantity greater than 0 "
                     + "and no greater than 1,000,000.");
+        }
+        if (quantity <= 0)
+        {
+            throw new IllegalArgumentException(
+                "Quantity must be greater than 0.");
         }
     }
 }
