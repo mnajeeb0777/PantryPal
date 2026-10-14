@@ -1,0 +1,17 @@
+
+# Local project documentation
+/docs/
+
+# Java build outputs
+*.class
+target/
+build/
+bin/
+
+# Eclipse local settings
+.metadata/
+.settings/
+
+# Operating system files
+.DS_Store
+Thumbs.db
