@@ -1,6 +1,8 @@
 
 # Local project documentation
 /docs/
+/DELIVERABLE_3_AUDIT.md
+/IMPLEMENTATION_NOTES.md
 
 # Java build outputs
 *.class
