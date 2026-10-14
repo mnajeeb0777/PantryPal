@@ -1,8 +1,9 @@
+import java.util.UUID;
+
 /**
- * One ingredient entry.
- * Skeleton based on the UML and class reference; behavior is not implemented.
+ * One validated ingredient entry with identity independent of quantity.
  *
- * @author PantryPal team (GenAI-assisted skeleton draft)
+ * @author PantryPal team (GenAI-assisted implementation)
  * @version 2026.10.14
  */
 public class Ingredient
@@ -14,119 +15,217 @@ public class Ingredient
 
 
     /**
-     * TODO: implement construction per the class reference.
-     * @param id id input
-     * @param name name input
-     * @param quantity quantity input
-     * @param unit unit input
-     * @throws UnsupportedOperationException until implemented
+     * Creates a validated ingredient with a stable UUID.
+     * @param id stable entry identifier
+     * @param name display name
+     * @param quantity amount in the specified unit
+     * @param unit measurement unit
+     * @throws IllegalArgumentException if any ingredient value is invalid
      */
     public Ingredient(String id, String name, double quantity, Unit unit)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        validateId(id);
+        validateDetails(name, quantity, unit);
+        this.id = id;
+        this.name = name;
+        this.quantity = quantity;
+        this.unit = unit;
     }
 
 
     /**
-     * TODO: implement construction per the class reference.
-     * @param other other input
-     * @throws UnsupportedOperationException until implemented
+     * Creates an independent copy retaining the original ID.
+     * @param other object to copy or compare
+     * @throws IllegalArgumentException if other is null
      */
     public Ingredient(Ingredient other)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        if (other == null)
+        {
+            throw new IllegalArgumentException("Ingredient must not be null.");
+        }
+        id = other.id;
+        name = other.name;
+        quantity = other.quantity;
+        unit = other.unit;
     }
 
 
     /**
-     * TODO: implement getId per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Returns the stable identifier.
+     * @return the ingredient ID
      */
     public String getId()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        return id;
     }
 
 
     /**
-     * TODO: implement getName per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Returns the ingredient name.
+     * @return the display name
      */
     public String getName()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        return name;
     }
 
 
     /**
-     * TODO: implement getQuantity per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Returns the amount in the ingredient's unit.
+     * @return the positive quantity
      */
     public double getQuantity()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        return quantity;
     }
 
 
     /**
-     * TODO: implement getUnit per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Returns the measurement unit.
+     * @return the unit
      */
     public Unit getUnit()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        return unit;
     }
 
 
     /**
-     * TODO: implement updateDetails per the class reference.
-     * @param name name input
-     * @param quantity quantity input
-     * @param unit unit input
-     * @throws UnsupportedOperationException until implemented
+     * Validates all changes before updating any field.
+     * @param newName new display name
+     * @param newQuantity new amount in the specified unit
+     * @param newUnit new measurement unit
+     * @throws IllegalArgumentException if any new detail is invalid
      */
-    public void updateDetails(String name, double quantity, Unit unit)
+    public void updateDetails(
+        String newName,
+        double newQuantity,
+        Unit newUnit)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        validateDetails(newName, newQuantity, newUnit);
+        name = newName;
+        quantity = newQuantity;
+        unit = newUnit;
     }
 
 
     /**
-     * TODO: implement setQuantity per the class reference.
-     * @param quantity quantity input
-     * @throws UnsupportedOperationException until implemented
+     * Changes the quantity after validating its range.
+     * @param quantity amount in the specified unit
+     * @throws IllegalArgumentException if the quantity is invalid
      */
     public void setQuantity(double quantity)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        validateQuantity(quantity);
+        this.quantity = quantity;
     }
 
 
     /**
-     * TODO: implement equals per the class reference.
-     * @param other other input
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Compares identity by ID, independent of mutable details.
+     * @param other object to copy or compare
+     * @return true for an ingredient with the same ID
      */
     @Override
     public boolean equals(Object other)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        if (this == other)
+        {
+            return true;
+        }
+        if (other == null || getClass() != other.getClass())
+        {
+            return false;
+        }
+        Ingredient ingredient = (Ingredient)other;
+        return id.equals(ingredient.id);
     }
 
 
     /**
-     * TODO: implement hashCode per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Returns a hash consistent with ID-based equality.
+     * @return the ID hash
      */
     @Override
     public int hashCode()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        return id.hashCode();
+    }
+
+
+    /**
+     * Validates UUID spelling without replacing the supplied identifier.
+     * @param value identifier to validate
+     */
+    private static void validateId(String value)
+    {
+        if (value == null)
+        {
+            throw new IllegalArgumentException("ID must not be null.");
+        }
+        try
+        {
+            if (!UUID.fromString(value).toString().equalsIgnoreCase(value))
+            {
+                throw new IllegalArgumentException("ID must be a UUID.");
+            }
+        }
+        catch (IllegalArgumentException exception)
+        {
+            throw new IllegalArgumentException("ID must be a UUID.",
+                exception);
+        }
+    }
+
+
+    /**
+     * Checks all mutable values before allowing an update.
+     * @param name proposed name
+     * @param quantity proposed amount
+     * @param unit proposed unit
+     */
+    private static void validateDetails(
+        String name,
+        double quantity,
+        Unit unit)
+    {
+        if (name == null || name.isBlank()
+            || !name.codePoints().anyMatch(Character::isLetter)
+            || name.codePoints().anyMatch(Character::isISOControl))
+        {
+            throw new IllegalArgumentException(
+                "Enter a valid ingredient name.");
+        }
+        if (name.length() > 100)
+        {
+            throw new IllegalArgumentException(
+                "Ingredient names cannot exceed 100 characters.");
+        }
+        validateQuantity(quantity);
+        if (unit == null)
+        {
+            throw new IllegalArgumentException("Unit must not be null.");
+        }
+    }
+
+
+    /**
+     * Checks the quantity range from the project specification.
+     * @param quantity proposed amount
+     */
+    private static void validateQuantity(double quantity)
+    {
+        if (quantity <= 0)
+        {
+            throw new IllegalArgumentException(
+                "Quantity must be greater than 0.");
+        }
+        if (!Double.isFinite(quantity) || quantity > 1000000)
+        {
+            throw new IllegalArgumentException(
+                "Enter a finite quantity greater than 0 "
+                    + "and no greater than 1,000,000.");
+        }
     }
 }

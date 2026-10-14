@@ -6,8 +6,12 @@
  */
 public enum Effort
 {
+    /** Low-effort recipe classification. */
     EASY,
+    /** Moderate-effort recipe classification. */
     MEDIUM,
+    /** High-effort recipe classification. */
     HARD,
+    /** Effort has not been classified or supplied. */
     UNKNOWN
 }

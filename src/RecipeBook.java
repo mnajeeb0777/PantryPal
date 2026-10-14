@@ -1,126 +1,221 @@
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
+
 /**
- * Owns saved recipes.
- * Skeleton based on the UML and class reference; behavior is not implemented.
+ * Owns independent saved recipes, allowing names to repeat.
  *
- * @author PantryPal team (GenAI-assisted skeleton draft)
+ * @author PantryPal team (GenAI-assisted implementation)
  * @version 2026.10.14
  */
 public class RecipeBook
 {
-    private LinkedChain<Recipe> recipes;
+    private final LinkedChain<Recipe> recipes;
 
 
     /**
-     * TODO: implement construction per the class reference.
-     * @throws UnsupportedOperationException until implemented
+     * Creates an empty saved-recipe collection.
      */
     public RecipeBook()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        recipes = new LinkedChain<Recipe>();
     }
 
 
     /**
-     * TODO: implement construction per the class reference.
-     * @param initialRecipes initialRecipes input
-     * @throws UnsupportedOperationException until implemented
+     * Creates a book from independent copies of recipes.
+     * @param initialRecipes initial saved recipes to copy
+     * @throws IllegalArgumentException if entries are null or IDs repeat
      */
     public RecipeBook(Recipe[] initialRecipes)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        this();
+        if (initialRecipes == null)
+        {
+            throw new IllegalArgumentException("Initial recipes are null.");
+        }
+        Set<String> ids = new HashSet<String>();
+        for (int i = initialRecipes.length - 1; i >= 0; i--)
+        {
+            Recipe recipe = initialRecipes[i];
+            if (recipe == null || !ids.add(recipe.getId()))
+            {
+                throw new IllegalArgumentException(
+                    "Initial recipes must have unique IDs.");
+            }
+            recipes.add(new Recipe(recipe));
+        }
     }
 
 
     /**
-     * TODO: implement addRecipe per the class reference.
-     * @param recipe recipe input
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Stores an independent copy unless the local ID is already saved.
+     * @param recipe recipe to copy
+     * @return false for a duplicate local ID
+     * @throws IllegalArgumentException if recipe is null
      */
     public boolean addRecipe(Recipe recipe)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        if (recipe == null)
+        {
+            throw new IllegalArgumentException("Recipe must not be null.");
+        }
+        if (recipes.contains(recipe))
+        {
+            return false;
+        }
+        return recipes.add(new Recipe(recipe));
     }
 
 
     /**
-     * TODO: implement getAllRecipes per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Returns independent snapshots of all saved recipes.
+     * @return recipe snapshots, or an empty array
      */
     public Recipe[] getAllRecipes()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        Recipe[] result = entries();
+        for (int i = 0; i < result.length; i++)
+        {
+            result[i] = new Recipe(result[i]);
+        }
+        return result;
     }
 
 
     /**
-     * TODO: implement findRecipeById per the class reference.
-     * @param id id input
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Looks up a recipe using its local ID.
+     * @param id stable entry identifier
+     * @return a snapshot, or null if absent
+     * @throws IllegalArgumentException if ID is null or blank
      */
     public Recipe findRecipeById(String id)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        Recipe recipe = findStored(id);
+        return recipe == null ? null : new Recipe(recipe);
     }
 
 
     /**
-     * TODO: implement searchRecipes per the class reference.
-     * @param query query input
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Finds recipes by case-insensitive title substring.
+     * @param query case-insensitive name substring; blank matches all
+     * @return matching snapshots; blank query returns all
+     * @throws IllegalArgumentException if query is null
      */
     public Recipe[] searchRecipes(String query)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        if (query == null)
+        {
+            throw new IllegalArgumentException("Query must not be null.");
+        }
+        String search = query.strip().toLowerCase(Locale.ROOT);
+        Recipe[] result = new Recipe[recipes.size()];
+        int count = 0;
+        for (Recipe recipe : entries())
+        {
+            if (recipe.getName().toLowerCase(Locale.ROOT).contains(search))
+            {
+                result[count++] = new Recipe(recipe);
+            }
+        }
+        return Arrays.copyOf(result, count);
     }
 
 
     /**
-     * TODO: implement filterRecipes per the class reference.
-     * @param maxCookTimeMinutes maxCookTimeMinutes input
-     * @param effort effort input
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Applies both active filters; unknown times fail an active time filter.
+     * @param maxCookTimeMinutes maximum cook time; null disables the filter
+     * @param effort effort category; null disables an effort filter
+     * @return matching recipe snapshots
+     * @throws IllegalArgumentException if the time limit is negative
      */
     public Recipe[] filterRecipes(Integer maxCookTimeMinutes, Effort effort)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        if (maxCookTimeMinutes != null && maxCookTimeMinutes < 0)
+        {
+            throw new IllegalArgumentException(
+                "Maximum cook time must not be negative.");
+        }
+        Recipe[] result = new Recipe[recipes.size()];
+        int count = 0;
+        for (Recipe recipe : entries())
+        {
+            Integer time = recipe.getCookTimeMinutes();
+            boolean timeMatches = maxCookTimeMinutes == null
+                || (time != null && time <= maxCookTimeMinutes);
+            boolean effortMatches = effort == null
+                || recipe.getEffort() == effort;
+            if (timeMatches && effortMatches)
+            {
+                result[count++] = new Recipe(recipe);
+            }
+        }
+        return Arrays.copyOf(result, count);
     }
 
 
     /**
-     * TODO: implement removeRecipe per the class reference.
-     * @param id id input
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Removes only the saved recipe with the supplied local ID.
+     * @param id stable entry identifier
+     * @return false if absent, including an empty book
+     * @throws IllegalArgumentException if ID is null or blank
      */
     public boolean removeRecipe(String id)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        Recipe recipe = findStored(id);
+        return recipe != null && recipes.remove(recipe);
     }
 
 
     /**
-     * TODO: implement size per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Counts saved recipes.
+     * @return the recipe count
      */
     public int size()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        return recipes.size();
     }
 
 
     /**
-     * TODO: implement isEmpty per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Checks whether any recipes are saved.
+     * @return true when the book is empty
      */
     public boolean isEmpty()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        return recipes.isEmpty();
+    }
+
+
+    /**
+     * Gets internal references for private traversal only.
+     * @return entries in chain order
+     */
+    private Recipe[] entries()
+    {
+        return recipes.toArray(new Recipe[recipes.size()]);
+    }
+
+
+    /**
+     * Finds an internal recipe by local ID.
+     * @param id selected ID
+     * @return stored recipe, or null
+     */
+    private Recipe findStored(String id)
+    {
+        if (id == null || id.isBlank())
+        {
+            throw new IllegalArgumentException("ID must not be blank.");
+        }
+        for (Recipe recipe : entries())
+        {
+            if (recipe.getId().equals(id))
+            {
+                return recipe;
+            }
+        }
+        return null;
     }
 }
