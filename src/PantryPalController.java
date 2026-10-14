@@ -1,6 +1,7 @@
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Coordinates application operations.
@@ -337,6 +338,31 @@ public class PantryPalController
     public RecipeMatchResult compareRecipeWithPantry(Recipe recipe)
     {
         return recipeMatcher.compareRecipe(recipe, pantry.getAllIngredients());
+    }
+
+
+    /**
+     * Randomly chooses among all saved recipes the current pantry can supply.
+     * Every eligible saved recipe has an equal chance; repeats are allowed.
+     * Selection does not consume stock, save data, or change session flags.
+     * @return an independent recipe snapshot, or null if none can be cooked
+     * @throws IllegalArgumentException if a conversion is unrepresentable
+     */
+    public Recipe selectMealRouletteRecipe()
+    {
+        Ingredient[] stock = pantry.getAllIngredients();
+        Recipe[] saved = recipeBook.getAllRecipes();
+        Recipe[] eligible = new Recipe[saved.length];
+        int count = 0;
+        for (Recipe recipe : saved)
+        {
+            if (recipeMatcher.compareRecipe(recipe, stock).canCook())
+            {
+                eligible[count++] = recipe;
+            }
+        }
+        return count == 0 ? null
+            : eligible[ThreadLocalRandom.current().nextInt(count)];
     }
 
 

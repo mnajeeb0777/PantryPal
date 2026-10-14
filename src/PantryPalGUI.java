@@ -295,6 +295,20 @@ public class PantryPalGUI extends JPanel
         split.setDividerLocation(120);
         panel.add(split, BorderLayout.CENTER);
         panel.add(row(
+            button("mealRoulette", "Meal Roulette", () ->
+            {
+                Recipe choice = controller.selectMealRouletteRecipe();
+                if (choice == null)
+                {
+                    feedback("No cookable saved recipes. "
+                        + "Add ingredients or create a recipe.", false);
+                    return;
+                }
+                showRecipe(choice);
+                feedback("Meal Roulette picked: " + choice.getName()
+                    + ". Searched all saved recipes; pantry unchanged.",
+                    false);
+            }),
             button("recipeCompare", "Compare with pantry", () ->
             {
                 requireRecipe();
@@ -385,24 +399,32 @@ public class PantryPalGUI extends JPanel
                 minutes(prepTime), minutes(cookTime),
                 Effort.valueOf((String)recipeEffort.getSelectedItem()));
             resetRecipeForm();
-            recipeQuery.setText("");
-            maxCookTime.setText("");
-            effortFilter.setSelectedIndex(0);
-            refreshRecipes();
-            tabs.setSelectedIndex(1);
-            for (int i = 0; i < shownRecipes.length; i++)
-            {
-                if (shownRecipes[i].getId().equals(recipe.getId()))
-                {
-                    int viewRow = recipeTable.convertRowIndexToView(i);
-                    recipeTable.setRowSelectionInterval(viewRow, viewRow);
-                    break;
-                }
-            }
+            showRecipe(recipe);
             feedback("Recipe saved to this session.", false);
         })), BorderLayout.SOUTH);
         panel.add(steps, BorderLayout.SOUTH);
         return panel;
+    }
+
+
+    private void showRecipe(Recipe recipe)
+    {
+        recipeQuery.setText("");
+        maxCookTime.setText("");
+        effortFilter.setSelectedIndex(0);
+        refreshRecipes();
+        tabs.setSelectedIndex(1);
+        for (int i = 0; i < shownRecipes.length; i++)
+        {
+            if (shownRecipes[i].getId().equals(recipe.getId()))
+            {
+                int viewRow = recipeTable.convertRowIndexToView(i);
+                recipeTable.setRowSelectionInterval(viewRow, viewRow);
+                recipeTable.scrollRectToVisible(
+                    recipeTable.getCellRect(viewRow, 0, true));
+                break;
+            }
+        }
     }
 
 

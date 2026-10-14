@@ -275,6 +275,141 @@ public class PantryPalControllerTest extends TestCase
     }
 
 
+    /**
+     * Empty recipes/pantry and known shortages yield no selection.
+     * @throws IOException if a session operation unexpectedly fails
+     */
+    public void testRouletteWithoutCookableRecipes()
+        throws IOException
+    {
+        PantryPalController controller = new PantryPalController();
+        assertNull(controller.selectMealRouletteRecipe());
+        assertFalse(controller.hasUnsavedChanges());
+        Recipe recipe = TestFixtures.recipe(1, "Rice", 10, Effort.EASY);
+        controller.importRecipe(recipe);
+        assertNull(controller.selectMealRouletteRecipe());
+        Ingredient entry = controller.addPantryIngredient("Rice", 1, Unit.CUP);
+        assertNull(controller.selectMealRouletteRecipe());
+        controller.updatePantryIngredient(entry.getId(), "Rice", 2, Unit.CUP);
+        assertEquals(recipe, controller.selectMealRouletteRecipe());
+        controller.removeSavedRecipe(recipe.getId());
+        assertNull(controller.selectMealRouletteRecipe());
+        assertEquals(2.0,
+            controller.getPantryIngredients()[0].getQuantity(), 0.0);
+    }
+
+
+    /**
+     * Unknown units and repeated requirements cannot falsely qualify a recipe.
+     * @throws IOException if a session operation unexpectedly fails
+     */
+    public void testRouletteEligibilityRules()
+        throws IOException
+    {
+        PantryPalController controller = new PantryPalController();
+        Recipe incompatible = new Recipe(TestFixtures.id(1), "Weighed rice",
+            new Ingredient[] {
+                TestFixtures.ingredient(10, "Rice", 2, Unit.GRAM) },
+            new String[0], null, null, Effort.UNKNOWN, "", "");
+        Recipe repeated = new Recipe(TestFixtures.id(2), "Rice twice",
+            new Ingredient[] {
+                TestFixtures.ingredient(11, "Rice", 2, Unit.CUP),
+                TestFixtures.ingredient(12, "Rice", 2, Unit.CUP) },
+            new String[0], null, null, Effort.UNKNOWN, "", "");
+        controller.importRecipe(incompatible);
+        controller.importRecipe(repeated);
+        controller.addPantryIngredient("Rice", 3, Unit.CUP);
+        assertNull(controller.selectMealRouletteRecipe());
+        Recipe eligible = TestFixtures.recipe(3, "Rice bowl", 10, Effort.EASY);
+        controller.importRecipe(eligible);
+        assertEquals(eligible, controller.selectMealRouletteRecipe());
+        assertEquals(3.0,
+            controller.getPantryIngredients()[0].getQuantity(), 0.0);
+    }
+
+
+    /**
+     * Aliases and unit conversion qualify recipes using the existing matcher.
+     * @throws IOException if a session operation unexpectedly fails
+     */
+    public void testRouletteAliasesAndConversions()
+        throws IOException
+    {
+        PantryPalController controller = new PantryPalController();
+        Recipe eligible = new Recipe(TestFixtures.id(1), "Onion rice",
+            new Ingredient[] {
+                TestFixtures.ingredient(10, "Rice", 16, Unit.TABLESPOON),
+                TestFixtures.ingredient(11, "Scallions", 2, Unit.COUNT) },
+            new String[0], null, null, Effort.UNKNOWN, "", "");
+        controller.importRecipe(eligible);
+        controller.addPantryIngredient("Rice", 1, Unit.CUP);
+        controller.addPantryIngredient("Green onions", 2, Unit.COUNT);
+        assertEquals(eligible, controller.selectMealRouletteRecipe());
+        assertTrue(controller.cookRecipe(eligible));
+        assertNull(controller.selectMealRouletteRecipe());
+        assertEquals(0, controller.getPantryIngredients().length);
+    }
+
+
+    /**
+     * Each draw returns a cookable saved snapshot without reserving any stock.
+     * @throws IOException if a session operation unexpectedly fails
+     */
+    public void testRouletteMultipleCandidatesAndIsolation()
+        throws IOException
+    {
+        PantryPalController controller = new PantryPalController();
+        Recipe first = TestFixtures.recipe(1, "Rice bowl", 10, Effort.EASY);
+        Recipe second = TestFixtures.recipe(2, "Rice bowl", 30, Effort.HARD);
+        Recipe unavailable = new Recipe(TestFixtures.id(3), "Bean bowl",
+            new Ingredient[] {
+                TestFixtures.ingredient(10, "Beans", 1, Unit.CUP) },
+            new String[0], null, null, Effort.UNKNOWN, "", "");
+        controller.importRecipe(first);
+        controller.importRecipe(second);
+        controller.importRecipe(unavailable);
+        Ingredient stock = controller.addPantryIngredient("Rice", 2, Unit.CUP);
+        boolean dirty = controller.hasUnsavedChanges();
+        for (int i = 0; i < 30; i++)
+        {
+            Recipe choice = controller.selectMealRouletteRecipe();
+            assertNotNull(choice);
+            assertTrue(choice.equals(first) || choice.equals(second));
+            assertTrue(controller.compareRecipeWithPantry(choice).canCook());
+            choice.getRequiredIngredients()[0].setQuantity(9);
+            assertEquals(2.0, controller.findSavedRecipeById(choice.getId())
+                .getRequiredIngredients()[0].getQuantity(), 0.0);
+        }
+        assertEquals(dirty, controller.hasUnsavedChanges());
+        assertEquals(3, controller.getSavedRecipes().length);
+        assertEquals(2.0, controller.findPantryIngredientById(stock.getId())
+            .getQuantity(), 0.0);
+        controller.removeSavedRecipe(first.getId());
+        assertEquals(second, controller.selectMealRouletteRecipe());
+        controller.removeSavedRecipe(second.getId());
+        assertNull(controller.selectMealRouletteRecipe());
+    }
+
+
+    /**
+     * Unrepresentable conversions report an error without changing stock.
+     * @throws IOException if a session operation unexpectedly fails
+     */
+    public void testRouletteConversionFailure()
+        throws IOException
+    {
+        PantryPalController controller = new PantryPalController();
+        controller.importRecipe(
+            TestFixtures.recipe(1, "Rice bowl", 10, Effort.EASY));
+        controller.addPantryIngredient("Rice", Double.MIN_VALUE,
+            Unit.MILLILITER);
+        TestFixtures.invalid(() -> controller.selectMealRouletteRecipe());
+        assertEquals(Double.MIN_VALUE,
+            controller.getPantryIngredients()[0].getQuantity(), 0.0);
+        assertEquals(1, controller.getSavedRecipes().length);
+    }
+
+
     private void invalid(Operation action)
     {
         try

@@ -50,12 +50,14 @@ Deliverable 3 prototype and submission requirements still need completion.
   chain holding IngredientMatch entries.
 
 - PantryPalController: session construction, core pantry/recipe actions, UUID
-  creation, fresh comparison before cooking, and unsaved-change tracking.
+  creation, fresh comparison before cooking, unsaved-change tracking, and
+  random selection of a currently cookable saved recipe.
 - PantryPalGUI: Swing pantry management, custom recipe creation, saved-recipe
-  browsing/search/filtering, comparison, and cooking.
+  browsing/search/filtering, comparison, cooking, and Meal Roulette.
 
-Persistence, external recipe/price services, and stretch features remain future
-work. Unit and Effort retain their existing enum values.
+Meal Roulette is now the implemented scope stretch goal. Persistence, external
+recipe/price services, photo recognition, and social-media importing remain
+future work. Unit and Effort retain their existing enum values.
 
 ## Approved session-only Swing prototype
 
@@ -106,9 +108,9 @@ data unchanged.
 - The GUI requires Swing's event-dispatch thread. main schedules startup there.
   This keeps presentation code separate so a future GUI redesign can reuse the
   same controller and models.
-- Meal Roulette remains the next planned stretch feature, not part of this
-  interface increment. The working interface alone does not complete every
-  Deliverable 3 Exceeds criterion or the required README submission sections.
+- Meal Roulette was added in the following increment. Its working stretch
+  feature addresses the Working Application Slice Exceeds addition; the
+  remaining rubric checks and required README sections still need completion.
 
 ### Launch and check
 
@@ -129,6 +131,54 @@ requiring 2 cups of rice; select it in Recipes and compare; click **Cook &
 deduct ingredients**. The pantry should retain 1 cup, and the refreshed
 comparison should show a 1-cup shortage. Try an invalid quantity such as "abc"
 or 0, correct it, and confirm the session remains usable. Closing loses data.
+
+## Meal Roulette increment
+
+The user approved implementing the scope's Meal Roulette stretch goal. The
+feature stays in the existing controller/GUI architecture; no application class
+or dependency was added.
+
+- Added public PantryPalController.selectMealRouletteRecipe(): Recipe. The
+  scope described the behavior but the original UML/class reference did not
+  provide a method for it; this additive signature is recorded here.
+- Each call takes current pantry and saved-recipe snapshots and checks every
+  saved recipe with RecipeMatcher and RecipeMatchResult.canCook(). Each
+  comparison allocates
+  independently, so considering one candidate does not reserve stock against
+  another. Names, units, repeated requirements, and roundoff follow the existing
+  comparison rules.
+- The method collects eligible recipe snapshots in an array and selects one
+  with ThreadLocalRandom.nextInt(eligibleCount). Every eligible saved recipe ID
+  has equal probability. Same-name recipes remain distinct; consecutive draws
+  may repeat. There is no persistent history or forced rotation.
+- No candidates returns null, including an empty recipe book, empty pantry, or
+  only insufficient/unknown comparisons. The no-argument method has no invalid
+  input parameters; tests cover those boundary states and the existing
+  IllegalArgumentException contract for an unrepresentable conversion. Such an
+  error is surfaced rather than silently hiding the problematic recipe.
+- Selection returns an independent saved-recipe snapshot and changes neither
+  inventory, saved recipes, nor session flags. Cooking remains a separate action
+  that rechecks stock before deducting.
+- The Recipes tab has a Meal Roulette button. It searches all saved recipes,
+  regardless of browse filters. A successful draw clears those filters, selects
+  and scrolls to the chosen recipe by ID, and shows its comparison. A draw with
+  no eligible recipes leaves the view/data intact and explains that ingredients
+  or recipes need to be added. Errors use the existing recoverable feedback.
+- Shared GUI selection code now reveals both newly created recipes and roulette
+  results, correctly converting model/view indices when the table is sorted.
+
+Five new controller tests cover empty/short-stock cases, incompatible units,
+repeated requirements, aliases/conversions, multiple candidates, snapshot
+ownership, fresh state after removal/cooking, and conversion failure. Three
+GUI tests exercise the button, hidden/sorted candidates, invalid browse-filter
+text, no-candidate feedback, separate cooking, and error recovery. Repeated-draw
+tests assert eligibility and nonmutation, not a particular random sequence or
+statistical distribution, avoiding probabilistic test failures.
+
+To demonstrate: save at least two recipes and stock enough ingredients for
+them; click Meal Roulette in Recipes. The chosen recipe is displayed without
+deducting anything. Click Cook & deduct ingredients to consume stock, then draw
+again to confirm eligibility reflects the remaining pantry.
 
 ## Approved result-model decisions
 
@@ -297,6 +347,7 @@ text hashing costs. Recipe snapshots include deep copies, not just references.
 | RecipeMatcher comparison | Expected O(r * p * L + p + r) time; O(p + r) extra space | Snapshot validation, shared remaining quantities, and linear chain extraction/order restoration |
 | Session controller pantry/recipe operations | Same leading order as their delegated model operation | UUID generation/dirty flag do not change the dominant traversal/copy costs; no persistence work in session mode |
 | Controller compare/cook | O(r * p * L + p + r) | Cooking rechecks comparison and then deducts; two linear nested scans retain the same leading order |
+| Controller Meal Roulette | O(n + D + p + n * (r * p * L + p + r)) time, with r the maximum requirements per saved recipe; O(n + D + p + r) extra space | Copies saved recipes/pantry and compares each recipe independently; picking an eligible index is O(1); no earlier spec method estimate existed |
 | GUI recipe filtering/refresh | O(n * L + D) before table sorting | Delegated filters plus name matching and display snapshots; user-requested sorting adds O(k log k) for k visible rows |
 | GUI selected-recipe display | O(r * p * L + p + r + s + text length) before table sorting | Includes current comparison and rendering the recipe's requirements/instructions |
 
@@ -320,8 +371,8 @@ known shortages, excess stock, invalid/empty match arrays, and snapshot isolatio
 RecipeMatcher tests cover capped allocations, repeated/aliased requirements,
 multi-entry conversions, mixed/incompatible units, depleted stock, input/output
 isolation, integration with Pantry and RecipeBook, and deduction parity.
-The full suite passes 102 tests after the session GUI increment: the existing
-81 plus 11 controller tests and 10 GUI tests. GUI tests create actual Swing
+The full suite passes 110 tests after Meal Roulette: the existing
+81 plus 16 controller tests and 13 GUI tests. GUI tests create actual Swing
 controls on the EDT and click their buttons without opening desktop windows.
 They cover pantry CRUD, sorting/selection identity, recipe creation and draft
 recovery, combined filters, statuses, cooking, and invalid-input recovery.
@@ -350,10 +401,10 @@ build/. This checks component layout, not native window-manager behavior.
 | test/IngredientMatcherTest.java, test/TestFixtures.java | Codex/GenAI authored matcher tests and shared test support |
 | test/IngredientMatchTest.java, test/RecipeMatchResultTest.java | Codex/GenAI authored result validation, snapshot, shortage, and pantry-parity tests |
 | test/RecipeMatcherTest.java | Codex/GenAI authored 17 allocation, ownership, conversion, and integration tests |
-| src/PantryPalController.java | Codex/GenAI implemented session coordination and optional-service guards; user approved the temporary no-autosave behavior |
-| src/PantryPalGUI.java | Codex/GenAI designed and implemented the user-approved Swing prototype, input recovery, and session-loss warning |
-| test/PantryPalControllerTest.java | Codex/GenAI authored 11 session, ownership, validation, cooking, and unavailable-service tests |
-| test/PantryPalGUITest.java | Codex/GenAI authored 10 EDT-based tests using actual Swing controls |
+| src/PantryPalController.java | Codex/GenAI implemented session coordination, optional-service guards, and Meal Roulette; user approved session-only storage and the stretch feature |
+| src/PantryPalGUI.java | Codex/GenAI designed and implemented the user-approved Swing prototype, input recovery, session-loss warning, and Meal Roulette action |
+| test/PantryPalControllerTest.java | Codex/GenAI authored 16 session, ownership, validation, cooking, unavailable-service, and Meal Roulette tests |
+| test/PantryPalGUITest.java | Codex/GenAI authored 13 EDT-based tests using actual Swing controls, including roulette selection and recovery |
 | scripts/run.ps1 | Codex/GenAI added a launcher using the existing course-compatible toolchain |
 | IMPLEMENTATION_NOTES.md | Codex/GenAI recorded the approved decision, implementation details, and limits |
 

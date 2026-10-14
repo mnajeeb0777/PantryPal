@@ -325,6 +325,110 @@ public class PantryPalGUITest extends TestCase
     }
 
 
+    /**
+     * Roulette explains empty/ineligible collections and survives another try.
+     * @throws Exception if the EDT operation fails unexpectedly
+     */
+    public void testRouletteNoEligibleRecipes()
+        throws Exception
+    {
+        SwingUtilities.invokeAndWait(() ->
+        {
+            click("mealRoulette");
+            assertTrue(message().contains("No cookable saved recipes."));
+            assertFalse(controller.hasUnsavedChanges());
+            createRiceRecipe("Rice bowl", "2", "10");
+            addPantry("Rice", "1", "cup");
+            click("mealRoulette");
+            assertTrue(message().contains("No cookable saved recipes."));
+            assertEquals(1.0,
+                controller.getPantryIngredients()[0].getQuantity(), 0.0);
+            addPantry("Rice", "1", "cup");
+            click("mealRoulette");
+            assertTrue(message().contains("Meal Roulette picked: Rice bowl"));
+            assertEquals("Ready",
+                table("comparisonTable").getValueAt(0, 5));
+            assertEquals(2, controller.getPantryIngredients().length);
+        });
+    }
+
+
+    /**
+     * Roulette reveals its result despite filters/sorting and never cooks it.
+     * @throws Exception if the EDT operation fails unexpectedly
+     */
+    public void testRouletteSelectionAndCooking()
+        throws Exception
+    {
+        SwingUtilities.invokeAndWait(() ->
+        {
+            addPantry("Rice", "2", "cup");
+            createRiceRecipe("Zucchini-style rice", "2", "10");
+            createRiceRecipe("Abundant rice", "20", "40");
+            JTable recipes = table("recipeTable");
+            recipes.getRowSorter().toggleSortOrder(0);
+            set("recipeQuery", "Abundant");
+            set("maxCookTime", "50");
+            click("recipeSearch");
+            assertEquals(1, recipes.getRowCount());
+            // Even an unsubmitted invalid filter cannot block roulette.
+            set("maxCookTime", "invalid");
+            combo("effortFilter").setSelectedItem("HARD");
+            click("mealRoulette");
+            assertTrue(message().contains(
+                "Meal Roulette picked: Zucchini-style rice"));
+            assertEquals("", field("recipeQuery").getText());
+            assertEquals("", field("maxCookTime").getText());
+            assertEquals(0, combo("effortFilter").getSelectedIndex());
+            assertEquals("Zucchini-style rice",
+                recipes.getValueAt(recipes.getSelectedRow(), 0));
+            assertEquals("Ready",
+                table("comparisonTable").getValueAt(0, 5));
+            assertEquals(2.0,
+                controller.getPantryIngredients()[0].getQuantity(), 0.0);
+            click("recipeCook");
+            assertEquals(0, controller.getPantryIngredients().length);
+            click("mealRoulette");
+            assertTrue(message().contains("No cookable saved recipes."));
+            assertEquals("Missing",
+                table("comparisonTable").getValueAt(0, 5));
+        });
+    }
+
+
+    /**
+     * Unknown units and a conversion error stay recoverable in the GUI.
+     * @throws Exception if the EDT operation fails unexpectedly
+     */
+    public void testRouletteUnknownAndConversionRecovery()
+        throws Exception
+    {
+        SwingUtilities.invokeAndWait(() ->
+        {
+            createRiceRecipe("Rice bowl", "2", "10");
+            addPantry("Rice", "100", "gram");
+            click("mealRoulette");
+            assertTrue(message().contains("No cookable saved recipes."));
+            table("pantryTable").setRowSelectionInterval(0, 0);
+            set("pantryQuantity", Double.toString(Double.MIN_VALUE));
+            combo("pantryUnit").setSelectedItem("milliliter");
+            click("pantryUpdate");
+            click("mealRoulette");
+            assertTrue(message().startsWith("Please try again:"));
+            assertEquals(Double.MIN_VALUE,
+                controller.getPantryIngredients()[0].getQuantity(), 0.0);
+            table("pantryTable").setRowSelectionInterval(0, 0);
+            set("pantryQuantity", "2");
+            combo("pantryUnit").setSelectedItem("cup");
+            click("pantryUpdate");
+            click("mealRoulette");
+            assertTrue(message().contains("Meal Roulette picked: Rice bowl"));
+            assertEquals("Ready",
+                table("comparisonTable").getValueAt(0, 5));
+        });
+    }
+
+
     private void addPantry(String name, String quantity, String unit)
     {
         set("pantryName", name);
