@@ -1,81 +1,161 @@
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
+
 /**
- * The comparison results for a recipe.
- * Skeleton based on the UML and class reference; behavior is not implemented.
+ * Owns immutable comparison results for a nonempty recipe.
+ * Missing and uncomparable requirements are reported separately.
  *
- * @author PantryPal team (GenAI-assisted skeleton draft)
+ * @author PantryPal team (GenAI-assisted implementation)
  * @version 2026.10.14
  */
 public class RecipeMatchResult
 {
-    private String recipeId;
-    private IngredientMatch[] ingredientMatches;
+    private final String recipeId;
+    private final IngredientMatch[] ingredientMatches;
 
 
     /**
-     * TODO: implement construction per the class reference.
-     * @param recipeId recipeId input
-     * @param ingredientMatches ingredientMatches input
-     * @throws UnsupportedOperationException until implemented
+     * Copies one comparison entry per distinct requirement ID.
+     * @param recipeId local recipe UUID to retain
+     * @param ingredientMatches nonempty array of comparison entries
+     * @throws IllegalArgumentException if an ID or comparison entry is invalid
      */
     public RecipeMatchResult(
         String recipeId,
         IngredientMatch[] ingredientMatches)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        validateId(recipeId);
+        if (ingredientMatches == null || ingredientMatches.length == 0)
+        {
+            throw new IllegalArgumentException(
+                "A recipe comparison must contain at least one entry.");
+        }
+        this.ingredientMatches =
+            new IngredientMatch[ingredientMatches.length];
+        Set<String> ids = new HashSet<String>();
+        for (int i = 0; i < ingredientMatches.length; i++)
+        {
+            IngredientMatch match = ingredientMatches[i];
+            if (match == null)
+            {
+                throw new IllegalArgumentException(
+                    "Comparison entries must not be null.");
+            }
+            Ingredient requirement = match.getRequiredIngredient();
+            IngredientMatch snapshot = new IngredientMatch(
+                requirement, match.getAvailableQuantity());
+            if (!ids.add(requirement.getId()))
+            {
+                throw new IllegalArgumentException(
+                    "Comparison requirements must have unique IDs.");
+            }
+            this.ingredientMatches[i] = snapshot;
+        }
+        this.recipeId = recipeId;
     }
 
 
     /**
-     * TODO: implement getRecipeId per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Returns the identity of the recipe that was compared.
+     * @return the local recipe ID
      */
     public String getRecipeId()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        return recipeId;
     }
 
 
     /**
-     * TODO: implement getIngredientMatches per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Returns a new array containing the immutable comparison entries.
+     * @return entries in their original requirement order
      */
     public IngredientMatch[] getIngredientMatches()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        return ingredientMatches.clone();
     }
 
 
     /**
-     * TODO: implement getMissingIngredients per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Returns independent ingredients containing only known shortages.
+     * @return positive shortages, excluding sufficient/unknown requirements
      */
     public Ingredient[] getMissingIngredients()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        Ingredient[] result = new Ingredient[ingredientMatches.length];
+        int count = 0;
+        for (IngredientMatch match : ingredientMatches)
+        {
+            Double missing = match.getMissingQuantity();
+            if (missing != null && missing > 0)
+            {
+                Ingredient shortage = match.getRequiredIngredient();
+                shortage.setQuantity(missing);
+                result[count++] = shortage;
+            }
+        }
+        return Arrays.copyOf(result, count);
     }
 
 
     /**
-     * TODO: implement getUncomparableIngredients per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Returns independent snapshots whose quantities cannot be compared.
+     * @return unknown requirements with their full required amounts
      */
     public Ingredient[] getUncomparableIngredients()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        Ingredient[] result = new Ingredient[ingredientMatches.length];
+        int count = 0;
+        for (IngredientMatch match : ingredientMatches)
+        {
+            if (!match.canCompareQuantities())
+            {
+                result[count++] = match.getRequiredIngredient();
+            }
+        }
+        return Arrays.copyOf(result, count);
     }
 
 
     /**
-     * TODO: implement canCook per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Requires every comparison entry to be known and sufficient.
+     * @return whether the supplied comparison reports all requirements met
      */
     public boolean canCook()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        for (IngredientMatch match : ingredientMatches)
+        {
+            if (!match.isSufficient())
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+
+    /**
+     * Checks full UUID spelling without altering the supplied recipe ID.
+     * @param value local recipe identifier
+     */
+    private static void validateId(String value)
+    {
+        if (value == null)
+        {
+            throw new IllegalArgumentException("Recipe ID must not be null.");
+        }
+        try
+        {
+            if (!UUID.fromString(value).toString().equalsIgnoreCase(value))
+            {
+                throw new IllegalArgumentException("Recipe ID must be a UUID.");
+            }
+        }
+        catch (IllegalArgumentException exception)
+        {
+            throw new IllegalArgumentException("Recipe ID must be a UUID.",
+                exception);
+        }
     }
 }

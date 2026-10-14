@@ -1,81 +1,113 @@
 /**
- * The comparison result for one ingredient requirement.
- * Skeleton based on the UML and class reference; behavior is not implemented.
+ * An immutable comparison for one ingredient requirement.
+ * Available and missing quantities use the requirement's unit.
  *
- * @author PantryPal team (GenAI-assisted skeleton draft)
+ * @author PantryPal team (GenAI-assisted implementation)
  * @version 2026.10.14
  */
 public class IngredientMatch
 {
-    private Ingredient requiredIngredient;
-    private Double availableQuantity;
+    private final Ingredient requiredIngredient;
+    private final Double availableQuantity;
 
 
     /**
-     * TODO: implement construction per the class reference.
-     * @param requiredIngredient requiredIngredient input
-     * @param availableQuantity availableQuantity input
-     * @throws UnsupportedOperationException until implemented
+     * Copies the requirement and validates the available amount.
+     * @param requiredIngredient requirement to snapshot
+     * @param availableQuantity finite nonnegative amount, or null if unknown
+     * @throws IllegalArgumentException if a supplied value is invalid
      */
     public IngredientMatch(
         Ingredient requiredIngredient,
         Double availableQuantity)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        if (requiredIngredient == null)
+        {
+            throw new IllegalArgumentException(
+                "Required ingredient must not be null.");
+        }
+        if (availableQuantity != null
+            && (!Double.isFinite(availableQuantity) || availableQuantity < 0))
+        {
+            throw new IllegalArgumentException(
+                "Available quantity must be finite and nonnegative.");
+        }
+        this.requiredIngredient = new Ingredient(requiredIngredient);
+        this.availableQuantity = availableQuantity;
     }
 
 
     /**
-     * TODO: implement getRequiredIngredient per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Returns an independent snapshot of the requirement.
+     * @return the required ingredient, retaining its ID, amount, and unit
      */
     public Ingredient getRequiredIngredient()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        return new Ingredient(requiredIngredient);
     }
 
 
     /**
-     * TODO: implement getAvailableQuantity per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Returns the available amount in the requirement's unit.
+     * @return a nonnegative amount, or null if comparison is impossible
      */
     public Double getAvailableQuantity()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        return availableQuantity;
     }
 
 
     /**
-     * TODO: implement getMissingQuantity per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Calculates a shortage, treating conversion roundoff as zero.
+     * @return the positive shortage, zero if sufficient, or null if unknown
      */
     public Double getMissingQuantity()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        if (!canCompareQuantities())
+        {
+            return null;
+        }
+        double required = requiredIngredient.getQuantity();
+        double missing = Math.max(required - availableQuantity, 0);
+        return isRoundoff(missing, required, availableQuantity) ? 0 : missing;
     }
 
 
     /**
-     * TODO: implement canCompareQuantities per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Distinguishes a known amount (including zero) from an unknown amount.
+     * @return whether quantities can be compared
      */
     public boolean canCompareQuantities()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        return availableQuantity != null;
     }
 
 
     /**
-     * TODO: implement isSufficient per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Checks availability using the same roundoff policy as pantry deductions.
+     * @return true only if the amount is comparable and has no shortage
      */
     public boolean isSufficient()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        Double missing = getMissingQuantity();
+        return missing != null && missing == 0;
+    }
+
+
+    /**
+     * Matches Pantry's four-ULP and relative-difference roundoff limits.
+     * @param difference residual amount
+     * @param first first operand
+     * @param second second operand
+     * @return whether the residual is representational rounding
+     */
+    private static boolean isRoundoff(
+        double difference,
+        double first,
+        double second)
+    {
+        double scale = Math.max(Math.abs(first), Math.abs(second));
+        return difference == 0 || (Math.abs(difference) / scale <= 1e-12
+            && Math.abs(difference) <= 4 * Math.ulp(scale));
     }
 }

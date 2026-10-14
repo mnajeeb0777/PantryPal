@@ -1,7 +1,7 @@
 # PantryPal implementation decisions
 
-These notes record the approved changes and the first core implementation
-increment. The original README and reference documents remain unchanged.
+These notes record the approved changes and the core implementation increments.
+The original README and reference documents remain unchanged.
 
 ## Approved third LinkedChain element type
 
@@ -24,9 +24,9 @@ still count as one element type.
 - Preserve the requirement that comparison never double-counts pantry stock.
   Restoring output order does not replace the stock-allocation rules.
 
-**Status:** Approved by the user; documented here, but not implemented in this
-increment. RecipeMatcher and the result-model classes remain skeletons. No
-third-type grading credit is claimed yet.
+**Status:** Approved by the user; the result models are implemented, but
+RecipeMatcher remains a skeleton. Its local IngredientMatch chain is still
+planned, so no third-type grading credit is claimed yet.
 
 ## Implemented increment
 
@@ -40,9 +40,46 @@ third-type grading credit is claimed yet.
   removal.
 - IngredientMatcher: added with the user's explicit approval because pantry
   deductions require its name matching and unit conversions.
+- IngredientMatch: immutable requirement snapshot, validated available quantity,
+  and shortage/sufficiency calculations using the pantry's roundoff policy.
+- RecipeMatchResult: owned comparison snapshots, separate shortage/unknown
+  arrays, and a canCook result requiring every supplied match to be sufficient.
 
 No GUI, controller, persistence, external service, RecipeMatcher, or stretch
 feature was implemented. Unit and Effort retain their existing enum values.
+
+## Approved result-model decisions
+
+The user approved rejecting an empty comparison array, consistent with rejecting
+recipes that have no ingredients. A null array, null match, or repeated
+requirement ID is also invalid. Distinct requirements may still share a name.
+The recipe ID follows Recipe's UUID validation and is retained as supplied.
+
+IngredientMatch copies its required Ingredient. Known available quantities must
+be finite and nonnegative; null means the quantities cannot be compared. Zero
+means no stock, not unknown stock. Available amounts have no 1,000,000 cap,
+because they can represent combined or converted stock. Unknown amounts produce
+null shortages and are never sufficient.
+
+The user also approved using Pantry's exact four-ULP/relative-difference rule
+for comparison roundoff. A shortage within that tolerance is reported as zero
+by getMissingQuantity and is sufficient. A real positive shortage is retained,
+including tiny/subnormal values. Tests compare IngredientMatch decisions with
+Pantry.deductIngredients for single-requirement boundary cases. The tolerance
+formula is private in each class; parity tests guard against future drift.
+
+RecipeMatchResult copies each supplied match into an owned immutable match and
+returns a copy of the match array. Ingredient getters return independent copies.
+Known shortages preserve the requirement's ID, name, and unit while replacing
+its amount with only the missing quantity. Unknown requirements retain their
+full required quantity and appear only in getUncomparableIngredients. Output
+order follows input order. Empty result arrays are returned when no requirements
+belong in the requested category; zero-quantity Ingredients are never created.
+
+canCook describes the supplied comparisons; it does not look up a Recipe or
+allocate pantry stock. RecipeMatcher must later supply every requirement once
+and avoid reusing stock across equivalent requirements. These result models do
+not claim to solve that deferred matching work.
 
 ## Contracts and resolved discrepancies
 
@@ -136,6 +173,9 @@ text hashing costs. Recipe snapshots include deep copies, not just references.
 | Matcher name normalization/comparison | O(L), expected map lookup | Matches the normalization estimate |
 | Matcher compatibility/conversion | O(1) | Fixed set of enum units |
 | Custom matcher construction | O(a^2 * L) worst case for a chained aliases | More than the spec's O(a) copy-only estimate because chains/cycles are validated |
+| IngredientMatch construction and getters | O(1) with bounded Ingredient fields | Includes an independent ingredient snapshot |
+| RecipeMatchResult construction | Expected O(r) | Copies matches and checks unique requirement IDs |
+| RecipeMatchResult array getters/canCook | O(r) worst case | Scans or copies comparison entries; recipe ID getter is O(1) |
 
 The supplied LinkedChain.contains is O(n), not the O(1) shown in one spec table.
 Neither it nor any other supplied chain method was modified.
@@ -150,7 +190,10 @@ there are no getter input parameters to reject.
 
 The tests include duplicate IDs/names, unknown times, empty collections, absent
 removals, atomic failed updates/deductions, repeated requirements, alias/unit
-matching, and conversion rounding. The final GUI/console input parsing and
+matching, and conversion rounding. Result-model tests also cover null quantities,
+known shortages, excess stock, invalid/empty match arrays, and snapshot isolation.
+The full suite passes 64 tests after this result-model increment.
+The final GUI/console input parsing and
 re-prompt behavior remain future work; model tests do not claim to cover them.
 
 | File(s) | Contribution in this increment |
@@ -158,10 +201,12 @@ re-prompt behavior remain future work; model tests do not claim to cover them.
 | src/Ingredient.java, src/Recipe.java | Codex/GenAI implementation and validation; user supplied and approved the design |
 | src/Pantry.java, src/RecipeBook.java | Codex/GenAI implementation, storage ownership, queries, and mutations |
 | src/IngredientMatcher.java | Codex/GenAI implementation of the approved dependency |
+| src/IngredientMatch.java, src/RecipeMatchResult.java | Codex/GenAI implementation of result models with user-approved empty-array and roundoff decisions |
 | src/Unit.java, src/Effort.java | Codex/GenAI added enum-value documentation for course compiler checks; values unchanged |
 | test/IngredientTest.java, test/RecipeTest.java | Codex/GenAI authored model tests |
 | test/PantryTest.java, test/RecipeBookTest.java | Codex/GenAI authored collection tests |
 | test/IngredientMatcherTest.java, test/TestFixtures.java | Codex/GenAI authored matcher tests and shared test support |
+| test/IngredientMatchTest.java, test/RecipeMatchResultTest.java | Codex/GenAI authored result validation, snapshot, shortage, and pantry-parity tests |
 | IMPLEMENTATION_NOTES.md | Codex/GenAI recorded the approved decision, implementation details, and limits |
 
 Team review or testing beyond the work shown in this chat is not asserted.
