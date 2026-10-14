@@ -10,7 +10,11 @@ bin/
 
 # Eclipse local settings
 .metadata/
-.settings/
+.settings/*
+!.settings/org.eclipse.jdt.core.prefs
+!.settings/org.eclipse.jdt.ui.prefs
+*.launch
+.classpath.local
 
 # Operating system files
 .DS_Store
