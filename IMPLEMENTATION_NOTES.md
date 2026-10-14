@@ -49,8 +49,86 @@ Deliverable 3 prototype and submission requirements still need completion.
   repeated requirements, aliases, compatible conversions, and a local result
   chain holding IngredientMatch entries.
 
-No GUI, controller, persistence, external service, or stretch
-feature was implemented. Unit and Effort retain their existing enum values.
+- PantryPalController: session construction, core pantry/recipe actions, UUID
+  creation, fresh comparison before cooking, and unsaved-change tracking.
+- PantryPalGUI: Swing pantry management, custom recipe creation, saved-recipe
+  browsing/search/filtering, comparison, and cooking.
+
+Persistence, external recipe/price services, and stretch features remain future
+work. Unit and Effort retain their existing enum values.
+
+## Approved session-only Swing prototype
+
+The user chose a functional Swing desktop interface for this increment, with
+the option to redesign it later, and explicitly approved session-only storage.
+Swing uses the existing JDK; no dependency or Eclipse classpath changes are
+needed. The GUI calls the controller rather than accessing chain internals or
+owning the live Pantry/RecipeBook. Temporary GUI draft and display lists do not
+replace the model's LinkedChain storage.
+
+The GUI has three tabs:
+
+- **Pantry:** add, view, search, update, and remove ingredient entries. Names may
+  repeat; selections resolve to stable IDs even after sorting the table.
+- **Recipes:** view details and instructions, search by title, combine cook-time
+  and effort filters, compare current pantry stock, remove a recipe, and cook
+  with an all-or-nothing deduction. The comparison labels are Required,
+  Allocated, Missing, Unit, and Status; incompatible-only stock displays Unknown.
+- **Create recipe:** enter metadata, add/remove ingredient requirements, and
+  enter one instruction per line. Blank time fields mean unknown. Requirements
+  retain creation order even if the draft table is sorted.
+
+The GUI parses numeric text; the models continue to validate domain values.
+Invalid input produces an inline error and leaves the form available for
+correction. Text quantities show "Enter a valid number." Model messages cover
+zero/negative, nonfinite/oversized quantities, invalid names, and long names.
+Time fields accept nonnegative integers or blank. No-result searches and
+missing selections produce feedback rather than exceptions escaping the event
+handler. Rejected edits, invalid recipe drafts, and failed cooking leave live
+data unchanged.
+
+### Temporary departures and boundaries
+
+- Added a no-argument PantryPalController constructor for the session-only
+  prototype. The original constructor signature remains; its matcher is
+  required, while null persistence/import/price services disable those paths.
+- Successful session mutations set hasUnsavedChanges to true. They do not
+  autosave. Explicit save/load calls without a configured service fail with
+  IllegalStateException instead of pretending to succeed. This is the
+  user-approved temporary departure from the controller's autosave contract.
+- Persistence and external-service delegation are wired in the controller for
+  later use, but DataStore, PantryPalData, RecipeImporter, PriceFinder, and
+  StoreOffer remain skeletons. These configured-service paths are not functional
+  or verified end to end yet. The GUI exposes only working session operations.
+- The header always says that closing loses session data. Closing a changed
+  session asks for confirmation. No sample data is inserted automatically,
+  and no files or network requests are made by the session workflow.
+- The GUI requires Swing's event-dispatch thread. main schedules startup there.
+  This keeps presentation code separate so a future GUI redesign can reuse the
+  same controller and models.
+- Meal Roulette remains the next planned stretch feature, not part of this
+  interface increment. The working interface alone does not complete every
+  Deliverable 3 Exceeds criterion or the required README submission sections.
+
+### Launch and check
+
+From the repository root in PowerShell:
+
+```powershell
+.\scripts\run.ps1
+.\scripts\test.ps1
+```
+
+run.ps1 resolves the existing JDK 17 toolchain, compiles with Java 11 source/API
+compatibility, and starts PantryPalGUI. In Eclipse, refresh the project, then
+right-click src/PantryPalGUI.java and choose **Run As > Java Application**.
+No command-line arguments are needed.
+
+A short manual walkthrough: add 3 cups of rice in Pantry; create a recipe
+requiring 2 cups of rice; select it in Recipes and compare; click **Cook &
+deduct ingredients**. The pantry should retain 1 cup, and the refreshed
+comparison should show a 1-cup shortage. Try an invalid quantity such as "abc"
+or 0, correct it, and confirm the session remains usable. Closing loses data.
 
 ## Approved result-model decisions
 
@@ -217,6 +295,10 @@ text hashing costs. Recipe snapshots include deep copies, not just references.
 | RecipeMatchResult construction | Expected O(r) | Copies matches and checks unique requirement IDs |
 | RecipeMatchResult array getters/canCook | O(r) worst case | Scans or copies comparison entries; recipe ID getter is O(1) |
 | RecipeMatcher comparison | Expected O(r * p * L + p + r) time; O(p + r) extra space | Snapshot validation, shared remaining quantities, and linear chain extraction/order restoration |
+| Session controller pantry/recipe operations | Same leading order as their delegated model operation | UUID generation/dirty flag do not change the dominant traversal/copy costs; no persistence work in session mode |
+| Controller compare/cook | O(r * p * L + p + r) | Cooking rechecks comparison and then deducts; two linear nested scans retain the same leading order |
+| GUI recipe filtering/refresh | O(n * L + D) before table sorting | Delegated filters plus name matching and display snapshots; user-requested sorting adds O(k log k) for k visible rows |
+| GUI selected-recipe display | O(r * p * L + p + r + s + text length) before table sorting | Includes current comparison and rendering the recipe's requirements/instructions |
 
 The supplied LinkedChain.contains is O(n), not the O(1) shown in one spec table.
 Neither it nor any other supplied chain method was modified.
@@ -224,8 +306,10 @@ Neither it nor any other supplied chain method was modified.
 ## Validation and attribution
 
 Tests extend student.TestCase using the installed course JUnit 4.12 library.
-Each implemented public operation is exercised with normal and invalid or
-boundary scenarios. For no-argument getters, boundary values, empty collections,
+Implemented core operations are exercised with normal and invalid or boundary
+scenarios. Configured persistence/external-service paths and native window
+startup/close-dialog interaction remain outside the automated coverage.
+For no-argument getters, boundary values, empty collections,
 copy isolation, and constructor rejection cover applicable invalid-state risks;
 there are no getter input parameters to reject.
 
@@ -236,13 +320,21 @@ known shortages, excess stock, invalid/empty match arrays, and snapshot isolatio
 RecipeMatcher tests cover capped allocations, repeated/aliased requirements,
 multi-entry conversions, mixed/incompatible units, depleted stock, input/output
 isolation, integration with Pantry and RecipeBook, and deduction parity.
-The full suite passes 81 tests after this recipe-comparison increment.
+The full suite passes 102 tests after the session GUI increment: the existing
+81 plus 11 controller tests and 10 GUI tests. GUI tests create actual Swing
+controls on the EDT and click their buttons without opening desktop windows.
+They cover pantry CRUD, sorting/selection identity, recipe creation and draft
+recovery, combined filters, statuses, cooking, and invalid-input recovery.
 All 18 source files compile with JDK 17 and Java 11 source/API compatibility.
-The implemented core and all tests also compile with the course Eclipse
-compiler preferences without diagnostics. The course library emits its known
+The implemented classes and all tests also compile with the course Eclipse
+compiler preferences without diagnostics, using compiled future-service
+skeletons on the classpath. Compiling every skeleton directly with Eclipse
+still reports its pre-existing unused-field warnings. The course library emits
+its known
 Java 17 SecurityManager deprecation warning during otherwise successful tests.
-The final GUI/console input parsing and
-re-prompt behavior remain future work; model tests do not claim to cover them.
+The three tabs were also rendered offscreen and visually inspected at two
+widths. Render artifacts and the temporary preview harness are ignored under
+build/. This checks component layout, not native window-manager behavior.
 
 | File(s) | Contribution in this increment |
 | --- | --- |
@@ -258,6 +350,11 @@ re-prompt behavior remain future work; model tests do not claim to cover them.
 | test/IngredientMatcherTest.java, test/TestFixtures.java | Codex/GenAI authored matcher tests and shared test support |
 | test/IngredientMatchTest.java, test/RecipeMatchResultTest.java | Codex/GenAI authored result validation, snapshot, shortage, and pantry-parity tests |
 | test/RecipeMatcherTest.java | Codex/GenAI authored 17 allocation, ownership, conversion, and integration tests |
+| src/PantryPalController.java | Codex/GenAI implemented session coordination and optional-service guards; user approved the temporary no-autosave behavior |
+| src/PantryPalGUI.java | Codex/GenAI designed and implemented the user-approved Swing prototype, input recovery, and session-loss warning |
+| test/PantryPalControllerTest.java | Codex/GenAI authored 11 session, ownership, validation, cooking, and unavailable-service tests |
+| test/PantryPalGUITest.java | Codex/GenAI authored 10 EDT-based tests using actual Swing controls |
+| scripts/run.ps1 | Codex/GenAI added a launcher using the existing course-compatible toolchain |
 | IMPLEMENTATION_NOTES.md | Codex/GenAI recorded the approved decision, implementation details, and limits |
 
 Team review or testing beyond the work shown in this chat is not asserted.

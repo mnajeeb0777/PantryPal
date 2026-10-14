@@ -1,11 +1,13 @@
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.util.UUID;
 
 /**
  * Coordinates application operations.
- * Skeleton based on the UML and class reference; behavior is not implemented.
+ * The default constructor starts a session-only prototype.
+ * Optional external and persistence services remain future implementations.
  *
- * @author PantryPal team (GenAI-assisted skeleton draft)
+ * @author PantryPal team (GenAI-assisted implementation)
  * @version 2026.10.14
  */
 public class PantryPalController
@@ -22,12 +24,21 @@ public class PantryPalController
 
 
     /**
-     * TODO: implement construction per the class reference.
-     * @param dataStore dataStore input
-     * @param ingredientMatcher ingredientMatcher input
-     * @param recipeImporter recipeImporter input
-     * @param priceFinder priceFinder input
-     * @throws UnsupportedOperationException until implemented
+     * Starts an empty session with no file or external-service access.
+     */
+    public PantryPalController()
+    {
+        this(null, new IngredientMatcher(), null, null);
+    }
+
+
+    /**
+     * Creates empty collections with a required matcher and optional services.
+     * Null services disable their features for the session-only prototype.
+     * @param dataStore persistence service, or null
+     * @param ingredientMatcher required name and unit service
+     * @param recipeImporter external recipe service, or null
+     * @param priceFinder external price service, or null
      */
     public PantryPalController(
         DataStore dataStore,
@@ -35,53 +46,69 @@ public class PantryPalController
         RecipeImporter recipeImporter,
         PriceFinder priceFinder)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        if (ingredientMatcher == null)
+        {
+            throw new IllegalArgumentException(
+                "Ingredient matcher is required.");
+        }
+        this.dataStore = dataStore;
+        this.ingredientMatcher = ingredientMatcher;
+        this.recipeImporter = recipeImporter;
+        this.priceFinder = priceFinder;
+        pantry = new Pantry();
+        recipeBook = new RecipeBook();
+        recipeMatcher = new RecipeMatcher(ingredientMatcher);
     }
 
 
     /**
-     * TODO: implement loadData per the class reference.
+     * Validates both loaded collections before replacing current state.
      * @throws IOException as defined by the class reference error contract
-     * @throws UnsupportedOperationException until implemented
      */
     public void loadData()
         throws IOException
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        requireDataStore();
+        PantryPalData data = dataStore.load();
+        Pantry loadedPantry = new Pantry(data.getPantryIngredients());
+        RecipeBook loadedRecipes = new RecipeBook(data.getSavedRecipes());
+        pantry = loadedPantry;
+        recipeBook = loadedRecipes;
+        unsavedChanges = false;
     }
 
 
     /**
-     * TODO: implement saveData per the class reference.
+     * Saves current snapshots and clears the dirty flag only on success.
      * @throws IOException as defined by the class reference error contract
-     * @throws UnsupportedOperationException until implemented
      */
     public void saveData()
         throws IOException
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        requireDataStore();
+        dataStore.save(new PantryPalData(
+            pantry.getAllIngredients(), recipeBook.getAllRecipes()));
+        unsavedChanges = false;
     }
 
 
     /**
-     * TODO: implement hasUnsavedChanges per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Reports whether changes have not been persisted.
+     * @return true when collection changes have not been saved
      */
     public boolean hasUnsavedChanges()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        return unsavedChanges;
     }
 
 
     /**
-     * TODO: implement addPantryIngredient per the class reference.
-     * @param name name input
-     * @param quantity quantity input
-     * @param unit unit input
-     * @return the result specified by the class reference
+     * Creates a new pantry entry with its own UUID.
+     * @param name display name
+     * @param quantity positive finite amount, at most 1,000,000
+     * @param unit measurement unit
+     * @return an independent snapshot of the new pantry entry
      * @throws IOException as defined by the class reference error contract
-     * @throws UnsupportedOperationException until implemented
      */
     public Ingredient addPantryIngredient(
         String name,
@@ -89,54 +116,54 @@ public class PantryPalController
         Unit unit)
         throws IOException
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        Ingredient entry = new Ingredient(UUID.randomUUID().toString(),
+            name, quantity, unit);
+        pantry.addIngredient(entry);
+        changed();
+        return new Ingredient(entry);
     }
 
 
     /**
-     * TODO: implement getPantryIngredients per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Returns independent pantry snapshots.
+     * @return current pantry snapshots, possibly empty
      */
     public Ingredient[] getPantryIngredients()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        return pantry.getAllIngredients();
     }
 
 
     /**
-     * TODO: implement findPantryIngredientById per the class reference.
-     * @param id id input
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Returns the selected pantry entry, or null if absent.
+     * @param id stable entry ID
+     * @return a snapshot, or null if no entry has the ID
      */
     public Ingredient findPantryIngredientById(String id)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        return pantry.findIngredientById(id);
     }
 
 
     /**
-     * TODO: implement searchPantryIngredients per the class reference.
-     * @param query query input
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Searches pantry names; blank matches all entries.
+     * @param query name substring; blank matches all
+     * @return matching pantry snapshots, possibly empty
      */
     public Ingredient[] searchPantryIngredients(String query)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        return pantry.searchIngredients(query);
     }
 
 
     /**
-     * TODO: implement updatePantryIngredient per the class reference.
-     * @param id id input
-     * @param name name input
-     * @param quantity quantity input
-     * @param unit unit input
-     * @return the result specified by the class reference
+     * Updates an existing pantry entry; false means absent.
+     * @param id stable entry ID
+     * @param name display name
+     * @param quantity positive finite amount, at most 1,000,000
+     * @param unit measurement unit
+     * @return whether an entry was updated
      * @throws IOException as defined by the class reference error contract
-     * @throws UnsupportedOperationException until implemented
      */
     public boolean updatePantryIngredient(
         String id,
@@ -145,35 +172,43 @@ public class PantryPalController
         Unit unit)
         throws IOException
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        boolean updated = pantry.updateIngredient(id, name, quantity, unit);
+        if (updated)
+        {
+            changed();
+        }
+        return updated;
     }
 
 
     /**
-     * TODO: implement removePantryIngredient per the class reference.
-     * @param id id input
-     * @return the result specified by the class reference
+     * Removes an existing pantry entry; false means absent.
+     * @param id stable entry ID
+     * @return whether an entry was removed
      * @throws IOException as defined by the class reference error contract
-     * @throws UnsupportedOperationException until implemented
      */
     public boolean removePantryIngredient(String id)
         throws IOException
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        boolean removed = pantry.removeIngredient(id);
+        if (removed)
+        {
+            changed();
+        }
+        return removed;
     }
 
 
     /**
-     * TODO: implement addCustomRecipe per the class reference.
-     * @param name name input
-     * @param ingredients ingredients input
-     * @param instructions instructions input
-     * @param prepTimeMinutes prepTimeMinutes input
-     * @param cookTimeMinutes cookTimeMinutes input
-     * @param effort effort input
-     * @return the result specified by the class reference
+     * Stores a new custom recipe with a generated UUID.
+     * @param name display name
+     * @param ingredients nonempty array of recipe requirements
+     * @param instructions ordered cooking steps
+     * @param prepTimeMinutes prep time, or null if unknown
+     * @param cookTimeMinutes cook time, or null if unknown
+     * @param effort effort category; null disables a filter
+     * @return an independent snapshot of the new recipe
      * @throws IOException as defined by the class reference error contract
-     * @throws UnsupportedOperationException until implemented
      */
     public Recipe addCustomRecipe(
         String name,
@@ -184,160 +219,178 @@ public class PantryPalController
         Effort effort)
         throws IOException
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        Recipe recipe = new Recipe(UUID.randomUUID().toString(), name,
+            ingredients, instructions, prepTimeMinutes, cookTimeMinutes,
+            effort, "", "");
+        recipeBook.addRecipe(recipe);
+        changed();
+        return new Recipe(recipe);
     }
 
 
     /**
-     * TODO: implement getSavedRecipes per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Returns independent recipe snapshots.
+     * @return current recipe snapshots, possibly empty
      */
     public Recipe[] getSavedRecipes()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        return recipeBook.getAllRecipes();
     }
 
 
     /**
-     * TODO: implement findSavedRecipeById per the class reference.
-     * @param id id input
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Returns the selected recipe, or null if absent.
+     * @param id stable entry ID
+     * @return a snapshot, or null if no recipe has the ID
      */
     public Recipe findSavedRecipeById(String id)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        return recipeBook.findRecipeById(id);
     }
 
 
     /**
-     * TODO: implement searchSavedRecipes per the class reference.
-     * @param query query input
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Searches saved recipe names; blank matches all recipes.
+     * @param query name substring; blank matches all
+     * @return matching recipe snapshots, possibly empty
      */
     public Recipe[] searchSavedRecipes(String query)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        return recipeBook.searchRecipes(query);
     }
 
 
     /**
-     * TODO: implement filterSavedRecipes per the class reference.
-     * @param maxCookTimeMinutes maxCookTimeMinutes input
-     * @param effort effort input
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Combines active time and effort filters.
+     * @param maxCookTimeMinutes maximum cook time, or null to disable
+     * @param effort effort category; null disables a filter
+     * @return recipes satisfying every active filter
      */
     public Recipe[] filterSavedRecipes(
         Integer maxCookTimeMinutes,
         Effort effort)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        return recipeBook.filterRecipes(maxCookTimeMinutes, effort);
     }
 
 
     /**
-     * TODO: implement removeSavedRecipe per the class reference.
-     * @param id id input
-     * @return the result specified by the class reference
+     * Removes a saved recipe; false means absent.
+     * @param id stable entry ID
+     * @return whether a recipe was removed
      * @throws IOException as defined by the class reference error contract
-     * @throws UnsupportedOperationException until implemented
      */
     public boolean removeSavedRecipe(String id)
         throws IOException
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        boolean removed = recipeBook.removeRecipe(id);
+        if (removed)
+        {
+            changed();
+        }
+        return removed;
     }
 
 
     /**
-     * TODO: implement searchExternalRecipes per the class reference.
-     * @param query query input
-     * @return the result specified by the class reference
+     * Delegates to the optional external recipe service.
+     * @param query name substring; blank matches all
+     * @return recipe results without automatically saving them
      * @throws IOException as defined by the class reference error contract
      * @throws InterruptedException if an external request is interrupted
-     * @throws UnsupportedOperationException until implemented
      */
     public Recipe[] searchExternalRecipes(String query)
         throws IOException, InterruptedException
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        if (recipeImporter == null)
+        {
+            throw new IllegalStateException(
+                "External recipe search is unavailable in this prototype.");
+        }
+        return recipeImporter.searchRecipes(query);
     }
 
 
     /**
-     * TODO: implement importRecipe per the class reference.
-     * @param recipe recipe input
-     * @return the result specified by the class reference
+     * Stores a recipe snapshot unless its ID is already present.
+     * @param recipe recipe snapshot to process
+     * @return false if the recipe ID is already saved
      * @throws IOException as defined by the class reference error contract
-     * @throws UnsupportedOperationException until implemented
      */
     public boolean importRecipe(Recipe recipe)
         throws IOException
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        boolean added = recipeBook.addRecipe(recipe);
+        if (added)
+        {
+            changed();
+        }
+        return added;
     }
 
 
     /**
-     * TODO: implement compareRecipeWithPantry per the class reference.
-     * @param recipe recipe input
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Compares requirements against current pantry stock.
+     * @param recipe recipe snapshot to process
+     * @return one allocation result per recipe requirement
      */
     public RecipeMatchResult compareRecipeWithPantry(Recipe recipe)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        return recipeMatcher.compareRecipe(recipe, pantry.getAllIngredients());
     }
 
 
     /**
-     * TODO: implement cookRecipe per the class reference.
-     * @param recipe recipe input
-     * @return the result specified by the class reference
+     * Rechecks stock and deducts all requirements or changes nothing.
+     * @param recipe recipe snapshot to process
+     * @return true on complete deduction; false without changes on shortage
      * @throws IOException as defined by the class reference error contract
-     * @throws UnsupportedOperationException until implemented
      */
     public boolean cookRecipe(Recipe recipe)
         throws IOException
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        if (!compareRecipeWithPantry(recipe).canCook())
+        {
+            return false;
+        }
+        boolean cooked = pantry.deductIngredients(
+            recipe.getRequiredIngredients(), ingredientMatcher);
+        if (cooked)
+        {
+            changed();
+        }
+        return cooked;
     }
 
 
     /**
-     * TODO: implement setBrokeModeEnabled per the class reference.
-     * @param enabled enabled input
-     * @throws UnsupportedOperationException until implemented
+     * Changes the session's Broke Mode flag.
+     * @param enabled whether to enable Broke Mode
      */
     public void setBrokeModeEnabled(boolean enabled)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        brokeModeEnabled = enabled;
     }
 
 
     /**
-     * TODO: implement isBrokeModeEnabled per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Returns the session's Broke Mode flag.
+     * @return whether Broke Mode is enabled
      */
     public boolean isBrokeModeEnabled()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        return brokeModeEnabled;
     }
 
 
     /**
-     * TODO: implement findNearbyOffers per the class reference.
-     * @param ingredient ingredient input
-     * @param zipCode zipCode input
-     * @param radiusMiles radiusMiles input
-     * @return the result specified by the class reference
+     * Delegates only when Broke Mode and a price service are available.
+     * @param ingredient ingredient requirement
+     * @param zipCode search postal code
+     * @param radiusMiles search radius in miles
+     * @return offers returned by the configured service
      * @throws IOException as defined by the class reference error contract
      * @throws InterruptedException if an external request is interrupted
-     * @throws UnsupportedOperationException until implemented
      */
     public StoreOffer[] findNearbyOffers(
         Ingredient ingredient,
@@ -345,51 +398,93 @@ public class PantryPalController
         double radiusMiles)
         throws IOException, InterruptedException
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        if (!brokeModeEnabled)
+        {
+            throw new IllegalStateException("Broke Mode must be enabled.");
+        }
+        requirePriceFinder();
+        return priceFinder.findNearbyOffers(ingredient, zipCode, radiusMiles);
     }
 
 
     /**
-     * TODO: implement findCheapestOffer per the class reference.
-     * @param ingredient ingredient input
-     * @param offers offers input
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Delegates to the optional price service.
+     * @param ingredient ingredient requirement
+     * @param offers offers to compare
+     * @return the cheapest eligible offer, or null if none qualifies
      */
     public StoreOffer findCheapestOffer(
         Ingredient ingredient,
         StoreOffer[] offers)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        requirePriceFinder();
+        return priceFinder.findCheapestOffer(ingredient, offers);
     }
 
 
     /**
-     * TODO: implement calculateRequiredPackages per the class reference.
-     * @param ingredient ingredient input
-     * @param offer offer input
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Delegates to the optional price service.
+     * @param ingredient ingredient requirement
+     * @param offer selected store offer
+     * @return the number of whole packages required
      */
     public int calculateRequiredPackages(
         Ingredient ingredient,
         StoreOffer offer)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        requirePriceFinder();
+        return priceFinder.calculateRequiredPackages(ingredient, offer);
     }
 
 
     /**
-     * TODO: implement calculatePurchaseCost per the class reference.
-     * @param ingredient ingredient input
-     * @param offer offer input
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Delegates to the optional price service.
+     * @param ingredient ingredient requirement
+     * @param offer selected store offer
+     * @return the total cost of the required packages
      */
     public BigDecimal calculatePurchaseCost(
         Ingredient ingredient,
         StoreOffer offer)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        requirePriceFinder();
+        return priceFinder.calculatePurchaseCost(ingredient, offer);
+    }
+
+    /**
+     * Marks a successful mutation, saving only when persistence is configured.
+     * @throws IOException if the configured save fails
+     */
+    private void changed()
+        throws IOException
+    {
+        unsavedChanges = true;
+        if (dataStore != null)
+        {
+            saveData();
+        }
+    }
+
+
+    /** Rejects persistence requests in session-only mode. */
+    private void requireDataStore()
+    {
+        if (dataStore == null)
+        {
+            throw new IllegalStateException(
+                "Saving/loading is unavailable "
+                    + "in this session-only prototype.");
+        }
+    }
+
+
+    /** Rejects price operations when no price service is configured. */
+    private void requirePriceFinder()
+    {
+        if (priceFinder == null)
+        {
+            throw new IllegalStateException(
+                "Price lookup is unavailable in this prototype.");
+        }
     }
 }
