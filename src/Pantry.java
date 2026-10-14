@@ -194,6 +194,7 @@ public class Pantry
         for (Ingredient required : requiredIngredients)
         {
             double needed = required.getQuantity();
+            double allocated = 0;
             for (int i = 0; i < stock.length && needed > 0; i++)
             {
                 if (remaining[i] == 0
@@ -208,6 +209,7 @@ public class Pantry
                     remaining[i], stock[i].getUnit(), required.getUnit());
                 if (available <= needed)
                 {
+                    allocated += available;
                     remaining[i] = 0;
                     double difference = needed - available;
                     needed = isRoundoff(difference, needed, available)
@@ -223,7 +225,11 @@ public class Pantry
                     needed = 0;
                 }
             }
-            if (needed > 0)
+            // Check the total allocation at the requirement's scale, just as
+            // IngredientMatch does when stock spans several pantry entries.
+            if (needed > 0 && !isRoundoff(
+                Math.max(required.getQuantity() - allocated, 0),
+                required.getQuantity(), allocated))
             {
                 return false;
             }
