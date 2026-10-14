@@ -115,6 +115,8 @@ public class PantryPalGUI extends JPanel
             "Session-only prototype: all data is lost when you close.");
         session.setForeground(new Color(124, 68, 22));
         header.add(session, BorderLayout.SOUTH);
+        header.add(button("loadDemo", "Load demo data",
+            () -> loadDemoData()), BorderLayout.EAST);
         add(header, BorderLayout.NORTH);
         tabs.setName("tabs");
         tabs.addTab("Pantry", pantryPanel());
@@ -127,7 +129,7 @@ public class PantryPalGUI extends JPanel
         add(status, BorderLayout.SOUTH);
         refreshPantry();
         refreshRecipes();
-        feedback("Start by adding pantry ingredients or creating a recipe.",
+        feedback("Load demo data, add pantry ingredients, or create a recipe.",
             false);
     }
 
@@ -170,6 +172,91 @@ public class PantryPalGUI extends JPanel
             });
             window.setVisible(true);
         });
+    }
+
+
+    private void loadDemoData()
+        throws IOException
+    {
+        if (controller.getPantryIngredients().length != 0
+            || controller.getSavedRecipes().length != 0)
+        {
+            feedback("Demo data requires an empty session. "
+                + "Open a new window by running the app again.", true);
+            return;
+        }
+        controller.addPantryIngredient("Rice", 1, Unit.KILOGRAM);
+        controller.addPantryIngredient("Pasta", 500, Unit.GRAM);
+        controller.addPantryIngredient("Eggs", 6, Unit.COUNT);
+        controller.addPantryIngredient("Milk", 1, Unit.LITER);
+        controller.addPantryIngredient("Cheese", 200, Unit.GRAM);
+        controller.addPantryIngredient("Butter", 100, Unit.GRAM);
+        controller.addPantryIngredient("Olive oil", 8, Unit.TABLESPOON);
+        controller.addPantryIngredient("Salt", 10, Unit.TEASPOON);
+
+        controller.addCustomRecipe("Cheesy Pasta", new Ingredient[] {
+            demoIngredient("Pasta", 200, Unit.GRAM),
+            demoIngredient("Cheese", 80, Unit.GRAM),
+            demoIngredient("Milk", 100, Unit.MILLILITER),
+            demoIngredient("Butter", 20, Unit.GRAM) },
+            new String[] { "Boil the pasta in water until tender and drain.",
+                "Warm the butter and milk, then stir in the cheese.",
+                "Toss the pasta with the sauce and serve." },
+            5, 15, Effort.EASY);
+        controller.addCustomRecipe("Scrambled Eggs", new Ingredient[] {
+            demoIngredient("Eggs", 2, Unit.COUNT),
+            demoIngredient("Milk", 30, Unit.MILLILITER),
+            demoIngredient("Butter", 10, Unit.GRAM),
+            demoIngredient("Salt", 0.25, Unit.TEASPOON) },
+            new String[] { "Beat the eggs with milk and salt.",
+                "Melt the butter in a pan over medium-low heat.",
+                "Add the eggs and stir gently until set." },
+            3, 5, Effort.EASY);
+        controller.addCustomRecipe("Simple Rice", new Ingredient[] {
+            demoIngredient("Rice", 200, Unit.GRAM),
+            demoIngredient("Olive oil", 1, Unit.TABLESPOON),
+            demoIngredient("Salt", 0.5, Unit.TEASPOON) },
+            new String[] { "Rinse the rice and add it to a saucepan.",
+                "Add water according to the rice package, oil, and salt.",
+                "Simmer covered until tender, then rest and fluff." },
+            5, 20, Effort.EASY);
+        controller.addCustomRecipe("Tomato Pasta", new Ingredient[] {
+            demoIngredient("Pasta", 200, Unit.GRAM),
+            demoIngredient("Tomatoes", 3, Unit.COUNT),
+            demoIngredient("Olive oil", 2, Unit.TABLESPOON),
+            demoIngredient("Salt", 0.5, Unit.TEASPOON) },
+            new String[] { "Chop the tomatoes and simmer them in olive oil.",
+                "Boil the pasta until tender and drain.",
+                "Combine the pasta and tomatoes, then season with salt." },
+            10, 20, Effort.MEDIUM);
+        controller.addCustomRecipe("Big Batch Pancakes", new Ingredient[] {
+            demoIngredient("Flour", 1000, Unit.GRAM),
+            demoIngredient("Milk", 2, Unit.LITER),
+            demoIngredient("Eggs", 4, Unit.COUNT),
+            demoIngredient("Butter", 40, Unit.GRAM) },
+            new String[] { "Whisk the flour, milk, and eggs into a batter.",
+                "Heat a pan and grease it with a little butter.",
+                "Cook small portions of batter on both sides until set." },
+            10, 30, Effort.MEDIUM);
+        pantryQuery.setText("");
+        recipeQuery.setText("");
+        maxCookTime.setText("");
+        effortFilter.setSelectedIndex(0);
+        refreshPantry();
+        refreshRecipes();
+        feedback("Demo loaded: 8 ingredients and 5 recipes. "
+            + "Try Meal Roulette, compare Tomato Pasta, or cook Cheesy Pasta. "
+            + "Demo data lasts only for this session.", false);
+    }
+
+
+    private static Ingredient demoIngredient(
+        String name,
+        double quantity,
+        Unit unit)
+    {
+        return new Ingredient(UUID.randomUUID().toString(),
+            name, quantity, unit);
     }
 
 

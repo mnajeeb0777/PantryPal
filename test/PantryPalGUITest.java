@@ -43,6 +43,114 @@ public class PantryPalGUITest extends TestCase
 
 
     /**
+     * Demo controls load useful comparisons and support cooking and roulette.
+     * @throws Exception if the test operation fails unexpectedly
+     */
+    public void testDemoWorkflow()
+        throws Exception
+    {
+        SwingUtilities.invokeAndWait(() ->
+        {
+            set("pantryQuery", "nothing");
+            set("recipeQuery", "nothing");
+            set("maxCookTime", "bad");
+            click("loadDemo");
+            assertEquals(8, table("pantryTable").getRowCount());
+            assertEquals(5, table("recipeTable").getRowCount());
+            assertTrue(controller.hasUnsavedChanges());
+            assertTrue(message().contains("Demo loaded"));
+            int cookable = 0;
+            for (Recipe recipe : controller.getSavedRecipes())
+            {
+                RecipeMatchResult result =
+                    controller.compareRecipeWithPantry(recipe);
+                if (result.canCook())
+                {
+                    cookable++;
+                }
+                if (recipe.getName().equals("Big Batch Pancakes"))
+                {
+                    assertFalse(result.canCook());
+                    assertEquals(2, result.getMissingIngredients().length);
+                }
+                if (recipe.getName().equals("Tomato Pasta"))
+                {
+                    assertFalse(result.canCook());
+                    assertEquals("Tomatoes",
+                        result.getMissingIngredients()[0].getName());
+                }
+            }
+            assertEquals(3, cookable);
+            click("mealRoulette");
+            assertTrue(message().contains("Meal Roulette picked:"));
+            JTable recipes = table("recipeTable");
+            for (int row = 0; row < recipes.getRowCount(); row++)
+            {
+                if (recipes.getValueAt(row, 0).equals("Cheesy Pasta"))
+                {
+                    recipes.setRowSelectionInterval(row, row);
+                    break;
+                }
+            }
+            click("recipeCook");
+            assertTrue(message().contains("Cooked!"));
+            assertEquals(300.0, controller.searchPantryIngredients("Pasta")
+                [0].getQuantity(), 0.0);
+            assertEquals(0.9, controller.searchPantryIngredients("Milk")
+                [0].getQuantity(), 0.000001);
+            click("loadDemo");
+            assertTrue(message().contains("requires an empty session"));
+            assertEquals(8, controller.getPantryIngredients().length);
+            assertEquals(5, controller.getSavedRecipes().length);
+            assertEquals(300.0, controller.searchPantryIngredients("Pasta")
+                [0].getQuantity(), 0.0);
+        });
+    }
+
+
+    /**
+     * Existing pantry data prevents loading without changing data or filters.
+     * @throws Exception if the test operation fails unexpectedly
+     */
+    public void testDemoPreservesExistingPantry()
+        throws Exception
+    {
+        SwingUtilities.invokeAndWait(() ->
+        {
+            addPantry("Rice", "3", "cup");
+            set("pantryQuery", "Rice");
+            click("loadDemo");
+            assertTrue(message().contains("requires an empty session"));
+            assertEquals("Rice", field("pantryQuery").getText());
+            assertEquals(1, controller.getPantryIngredients().length);
+            assertEquals(3.0, controller.getPantryIngredients()[0]
+                .getQuantity(), 0.0);
+            assertEquals(0, controller.getSavedRecipes().length);
+        });
+    }
+
+
+    /**
+     * An existing recipe also prevents loading when the pantry is empty.
+     * @throws Exception if the test operation fails unexpectedly
+     */
+    public void testDemoPreservesExistingRecipes()
+        throws Exception
+    {
+        SwingUtilities.invokeAndWait(() ->
+        {
+            createRiceRecipe("My Rice", "1", "20");
+            click("loadDemo");
+            assertTrue(message().contains("requires an empty session"));
+            assertEquals(0, controller.getPantryIngredients().length);
+            assertEquals(1, controller.getSavedRecipes().length);
+            assertEquals("My Rice", controller.getSavedRecipes()[0]
+                .getName());
+        });
+    }
+
+
+    /**
      * Construction rejects missing services and work outside the Swing EDT.
      * @throws Exception if the test operation fails unexpectedly
      */
