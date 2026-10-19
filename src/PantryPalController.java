@@ -6,7 +6,7 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * Coordinates application operations.
  * The default constructor starts a session-only prototype.
- * Optional external and persistence services remain future implementations.
+ * A configured DataStore enables autosave and explicit startup loading.
  *
  * @author PantryPal team (GenAI-assisted implementation)
  * @version 2026.10.14
@@ -22,6 +22,7 @@ public class PantryPalController
     private DataStore dataStore;
     private boolean brokeModeEnabled;
     private boolean unsavedChanges;
+    private boolean loadRequired;
 
 
     /**
@@ -59,6 +60,7 @@ public class PantryPalController
         pantry = new Pantry();
         recipeBook = new RecipeBook();
         recipeMatcher = new RecipeMatcher(ingredientMatcher);
+        loadRequired = dataStore != null && dataStore.hasSaveFile();
     }
 
 
@@ -70,12 +72,15 @@ public class PantryPalController
         throws IOException
     {
         requireDataStore();
+        // A failed load must not allow autosave to replace the unreadable file.
+        loadRequired = true;
         PantryPalData data = dataStore.load();
         Pantry loadedPantry = new Pantry(data.getPantryIngredients());
         RecipeBook loadedRecipes = new RecipeBook(data.getSavedRecipes());
         pantry = loadedPantry;
         recipeBook = loadedRecipes;
         unsavedChanges = false;
+        loadRequired = false;
     }
 
 
@@ -87,6 +92,7 @@ public class PantryPalController
         throws IOException
     {
         requireDataStore();
+        requireLoaded();
         dataStore.save(new PantryPalData(
             pantry.getAllIngredients(), recipeBook.getAllRecipes()));
         unsavedChanges = false;
@@ -104,6 +110,16 @@ public class PantryPalController
 
 
     /**
+     * Reports whether this controller can save and load local data.
+     * @return true when a persistence service is configured
+     */
+    public boolean isPersistenceEnabled()
+    {
+        return dataStore != null;
+    }
+
+
+    /**
      * Creates a new pantry entry with its own UUID.
      * @param name display name
      * @param quantity positive finite amount, at most 1,000,000
@@ -117,6 +133,7 @@ public class PantryPalController
         Unit unit)
         throws IOException
     {
+        requireLoaded();
         Ingredient entry = new Ingredient(UUID.randomUUID().toString(),
             name, quantity, unit);
         pantry.addIngredient(entry);
@@ -173,6 +190,7 @@ public class PantryPalController
         Unit unit)
         throws IOException
     {
+        requireLoaded();
         boolean updated = pantry.updateIngredient(id, name, quantity, unit);
         if (updated)
         {
@@ -191,6 +209,7 @@ public class PantryPalController
     public boolean removePantryIngredient(String id)
         throws IOException
     {
+        requireLoaded();
         boolean removed = pantry.removeIngredient(id);
         if (removed)
         {
@@ -220,6 +239,7 @@ public class PantryPalController
         Effort effort)
         throws IOException
     {
+        requireLoaded();
         Recipe recipe = new Recipe(UUID.randomUUID().toString(), name,
             ingredients, instructions, prepTimeMinutes, cookTimeMinutes,
             effort, "", "");
@@ -284,6 +304,7 @@ public class PantryPalController
     public boolean removeSavedRecipe(String id)
         throws IOException
     {
+        requireLoaded();
         boolean removed = recipeBook.removeRecipe(id);
         if (removed)
         {
@@ -295,32 +316,46 @@ public class PantryPalController
 
     /**
      * Delegates to the optional external recipe service.
-     * @param query name substring; blank matches all
-     * @return recipe results without automatically saving them
+     * @param query nonblank recipe name
+     * @return drafts requiring review before saving
      * @throws IOException as defined by the class reference error contract
      * @throws InterruptedException if an external request is interrupted
      */
-    public Recipe[] searchExternalRecipes(String query)
+    public RecipeImportDraft[] searchExternalRecipes(String query)
         throws IOException, InterruptedException
     {
         if (recipeImporter == null)
         {
             throw new IllegalStateException(
-                "External recipe search is unavailable in this prototype.");
+                "External recipe search is not configured for this session.");
         }
         return recipeImporter.searchRecipes(query);
     }
 
 
     /**
-     * Stores a recipe snapshot unless its ID is already present.
+     * Stores a snapshot unless its local or external source identity is present.
      * @param recipe recipe snapshot to process
-     * @return false if the recipe ID is already saved
+     * @return false if this recipe is already saved, preserving the existing copy
      * @throws IOException as defined by the class reference error contract
      */
     public boolean importRecipe(Recipe recipe)
         throws IOException
     {
+        requireLoaded();
+        if (recipe == null)
+        {
+            throw new IllegalArgumentException("Recipe is required.");
+        }
+        for (Recipe saved : recipeBook.getAllRecipes())
+        {
+            if (!recipe.getExternalRecipeId().isBlank()
+                && recipe.getExternalRecipeId().equals(saved.getExternalRecipeId())
+                && recipe.getSourceUrl().equals(saved.getSourceUrl()))
+            {
+                return false;
+            }
+        }
         boolean added = recipeBook.addRecipe(recipe);
         if (added)
         {
@@ -375,6 +410,7 @@ public class PantryPalController
     public boolean cookRecipe(Recipe recipe)
         throws IOException
     {
+        requireLoaded();
         if (!compareRecipeWithPantry(recipe).canCook())
         {
             return false;
@@ -488,6 +524,18 @@ public class PantryPalController
         if (dataStore != null)
         {
             saveData();
+        }
+    }
+
+
+    /** Prevents edits/saves until an existing or failed save has been loaded. */
+    private void requireLoaded()
+    {
+        if (loadRequired)
+        {
+            throw new IllegalStateException(
+                "Load the save file successfully before changing data. "
+                    + "Restore or move the file, then retry loading.");
         }
     }
 

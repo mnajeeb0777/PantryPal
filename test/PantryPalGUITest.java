@@ -3,12 +3,16 @@ import java.awt.Container;
 import java.awt.Frame;
 import java.awt.GraphicsEnvironment;
 import java.awt.event.WindowEvent;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JFrame;
+import javax.swing.JLabel;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
@@ -27,6 +31,10 @@ public class PantryPalGUITest extends TestCase
 {
     private PantryPalController controller;
     private PantryPalGUI gui;
+    private Path directory;
+    private Path saveFile;
+    private String previousDataFile;
+    private JFrame desktopWindow;
 
 
     /**
@@ -37,8 +45,44 @@ public class PantryPalGUITest extends TestCase
     public void setUp()
         throws Exception
     {
+        directory = TestFixtures.temporaryDirectory();
+        saveFile = directory.resolve("data.properties");
+        previousDataFile = System.getProperty("pantrypal.dataFile");
+        System.setProperty("pantrypal.dataFile", saveFile.toString());
         controller = new PantryPalController();
         SwingUtilities.invokeAndWait(() -> gui = new PantryPalGUI(controller));
+    }
+
+
+    /**
+     * Restores launch configuration and removes only isolated test data.
+     * @throws Exception if Swing or file cleanup fails
+     */
+    @Override
+    public void tearDown() throws Exception
+    {
+        try
+        {
+            SwingUtilities.invokeAndWait(() ->
+            {
+                if (desktopWindow != null)
+                {
+                    desktopWindow.dispose();
+                }
+            });
+        }
+        finally
+        {
+            if (previousDataFile == null)
+            {
+                System.clearProperty("pantrypal.dataFile");
+            }
+            else
+            {
+                System.setProperty("pantrypal.dataFile", previousDataFile);
+            }
+            TestFixtures.deleteDirectory(directory);
+        }
     }
 
 
@@ -659,8 +703,7 @@ public class PantryPalGUITest extends TestCase
                         "main must open the desktop application.");
                 }
                 assertTrue(opened.isShowing());
-                assertEquals("PantryPal - Session prototype",
-                    opened.getTitle());
+                assertEquals("PantryPal", opened.getTitle());
                 assertEquals(0, ((JTable)find(opened, "pantryTable"))
                     .getRowCount());
                 opened.dispatchEvent(new WindowEvent(opened,
@@ -674,6 +717,136 @@ public class PantryPalGUITest extends TestCase
                     opened.dispose();
                 }
             }
+        });
+    }
+
+
+    /**
+     * Startup restores both collections, and saved changes survive reopening.
+     * @throws Exception if setup or Swing operations fail
+     */
+    public void testDesktopPersistence() throws Exception
+    {
+        DataStore store = new DataStore(saveFile);
+        store.save(new PantryPalData(new Ingredient[] {
+            TestFixtures.ingredient(1, "Rice", 3, Unit.CUP) },
+            new Recipe[] { TestFixtures.recipe(2, "Rice bowl", 10, Effort.EASY) }));
+        openApplicationWindow();
+        SwingUtilities.invokeAndWait(() ->
+        {
+            assertEquals(1, table("pantryTable").getRowCount());
+            assertEquals(1, table("recipeTable").getRowCount());
+            assertTrue(((JLabel)find(gui, "storageStatus")).getText()
+                .contains("Autosave is on"));
+            assertFalse(find(gui, "retryLoad").isVisible());
+            addPantry("Egg", "2", "count");
+            desktopWindow.dispatchEvent(new WindowEvent(desktopWindow,
+                WindowEvent.WINDOW_CLOSING));
+            assertFalse(desktopWindow.isDisplayable());
+        });
+        assertEquals(2, store.load().getPantryIngredients().length);
+        openApplicationWindow();
+        SwingUtilities.invokeAndWait(() ->
+            assertEquals(2, table("pantryTable").getRowCount()));
+    }
+
+
+    /**
+     * A corrupt startup file is protected until the user repairs and reloads it.
+     * @throws Exception if setup or Swing operations fail
+     */
+    public void testDesktopLoadFailureAndRetry() throws Exception
+    {
+        Files.writeString(saveFile, "version=99");
+        openApplicationWindow();
+        SwingUtilities.invokeAndWait(() ->
+        {
+            assertTrue(message().contains("Could not load"));
+            assertTrue(find(gui, "retryLoad").isVisible());
+            assertTrue(((JLabel)find(gui, "storageStatus")).getText()
+                .contains("Load failed"));
+            addPantry("Rice", "3", "cup");
+            assertEquals(0, table("pantryTable").getRowCount());
+            click("saveNow");
+            assertTrue(message().contains("retry loading"));
+        });
+        assertEquals("version=99", Files.readString(saveFile));
+        new DataStore(saveFile).save(new PantryPalData(new Ingredient[] {
+            TestFixtures.ingredient(1, "Rice", 3, Unit.CUP) }, new Recipe[0]));
+        SwingUtilities.invokeAndWait(() ->
+        {
+            click("retryLoad");
+            assertEquals(1, table("pantryTable").getRowCount());
+            assertFalse(find(gui, "retryLoad").isVisible());
+            assertTrue(message().contains("loaded"));
+            addPantry("Egg", "2", "count");
+        });
+        assertEquals(2, new DataStore(saveFile).load().getPantryIngredients().length);
+    }
+
+
+    /**
+     * Failed autosave displays changed memory and can retry without duplication.
+     * @throws Exception if setup or Swing operations fail
+     */
+    public void testAutosaveFailureRefreshAndRetry() throws Exception
+    {
+        controller = new PantryPalController(new DataStore(saveFile),
+            new IngredientMatcher(), null, null);
+        controller.loadData();
+        SwingUtilities.invokeAndWait(() ->
+        {
+            gui = new PantryPalGUI(controller);
+            addPantry("Rice", "5", "cup");
+            createRiceRecipe("Rice bowl", "2", "10");
+        });
+        Path backup = directory.resolve("previous.properties");
+        Files.move(saveFile, backup);
+        Files.createDirectory(saveFile);
+        Files.writeString(saveFile.resolve("block"), "keep");
+        SwingUtilities.invokeAndWait(() ->
+        {
+            click("recipeCook");
+            assertTrue(controller.hasUnsavedChanges());
+            assertTrue(message().contains("Could not save"));
+            assertTrue(message().contains("do not repeat"));
+            assertEquals("3.0", table("pantryTable").getValueAt(0, 1));
+            assertTrue(((JLabel)find(gui, "storageStatus")).getText()
+                .contains("Unsaved changes"));
+        });
+        Files.delete(saveFile.resolve("block"));
+        Files.delete(saveFile);
+        Files.move(backup, saveFile);
+        SwingUtilities.invokeAndWait(() ->
+        {
+            click("saveNow");
+            assertFalse(controller.hasUnsavedChanges());
+            assertTrue(message().contains("changes are saved"));
+        });
+        assertEquals(3.0, new DataStore(saveFile).load().getPantryIngredients()[0]
+            .getQuantity(), 0.0);
+    }
+
+
+    private void openApplicationWindow() throws Exception
+    {
+        Assume.assumeFalse("A desktop display is required for this test.",
+            GraphicsEnvironment.isHeadless());
+        Set<Frame> existing = new HashSet<Frame>(Arrays.asList(Frame.getFrames()));
+        PantryPalGUI.main(new String[0]);
+        SwingUtilities.invokeAndWait(() ->
+        {
+            for (Frame candidate : Frame.getFrames())
+            {
+                if (!existing.contains(candidate) && candidate instanceof JFrame
+                    && ((JFrame)candidate).getContentPane() instanceof PantryPalGUI)
+                {
+                    desktopWindow = (JFrame)candidate;
+                    gui = (PantryPalGUI)desktopWindow.getContentPane();
+                    return;
+                }
+            }
+            throw new AssertionError("main must open the application.");
         });
     }
 

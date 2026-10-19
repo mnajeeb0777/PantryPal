@@ -1,46 +1,57 @@
 /**
- * An independent save snapshot.
- * Skeleton based on the UML and class reference; behavior is not implemented.
+ * An independent, validated snapshot of both saved collections.
+ * Live collection storage remains in Pantry and RecipeBook.
  *
- * @author PantryPal team (GenAI-assisted skeleton draft)
+ * @author PantryPal team (GenAI-assisted implementation)
  * @version 2026.10.14
  */
 public class PantryPalData
 {
-    private Ingredient[] pantryIngredients;
-    private Recipe[] savedRecipes;
+    private final Ingredient[] pantryIngredients;
+    private final Recipe[] savedRecipes;
 
 
     /**
-     * TODO: implement construction per the class reference.
-     * @param pantryIngredients pantryIngredients input
-     * @param savedRecipes savedRecipes input
-     * @throws UnsupportedOperationException until implemented
+     * Validates and copies both collections, preserving their entry order.
+     * IDs must be unique within each collection; names may repeat.
+     * @param pantryIngredients pantry entries, possibly empty
+     * @param savedRecipes saved recipes, possibly empty
+     * @throws IllegalArgumentException if arrays/entries are null or IDs repeat
      */
     public PantryPalData(Ingredient[] pantryIngredients, Recipe[] savedRecipes)
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        this.pantryIngredients =
+            new Pantry(pantryIngredients).getAllIngredients();
+        this.savedRecipes = new RecipeBook(savedRecipes).getAllRecipes();
     }
 
 
     /**
-     * TODO: implement getPantryIngredients per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Returns independent copies of the saved pantry entries.
+     * @return pantry snapshots in their original order
      */
     public Ingredient[] getPantryIngredients()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        Ingredient[] result = new Ingredient[pantryIngredients.length];
+        for (int i = 0; i < result.length; i++)
+        {
+            result[i] = new Ingredient(pantryIngredients[i]);
+        }
+        return result;
     }
 
 
     /**
-     * TODO: implement getSavedRecipes per the class reference.
-     * @return the result specified by the class reference
-     * @throws UnsupportedOperationException until implemented
+     * Returns independent copies, including recipe requirements and steps.
+     * @return recipe snapshots in their original order
      */
     public Recipe[] getSavedRecipes()
     {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        Recipe[] result = new Recipe[savedRecipes.length];
+        for (int i = 0; i < result.length; i++)
+        {
+            result[i] = new Recipe(savedRecipes[i]);
+        }
+        return result;
     }
 }

@@ -9,6 +9,7 @@ import java.awt.Insets;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -32,7 +33,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.table.DefaultTableModel;
 
 /**
- * A Swing view for the session-only pantry and recipe prototype.
+ * A Swing view for pantry and recipe management with optional local saving.
  * Parses input and displays feedback through an application controller.
  *
  * @author PantryPal team (GenAI-assisted implementation)
@@ -42,6 +43,9 @@ public class PantryPalGUI extends JPanel
 {
     private final PantryPalController controller;
     private final JTextArea status = textArea("status", 2);
+    private final JLabel storageStatus = new JLabel();
+    private boolean loadFailed;
+    private JButton retryLoad;
     private final JTabbedPane tabs = new JTabbedPane();
     private final JTextField pantryQuery = field("pantryQuery");
     private final JTextField pantryName = field("pantryName");
@@ -111,17 +115,41 @@ public class PantryPalGUI extends JPanel
         header.add(title, BorderLayout.NORTH);
         header.add(new JLabel(
             "Know what you have. Make something good."), BorderLayout.CENTER);
-        JLabel session = new JLabel(
-            "Session-only prototype: all data is lost when you close.");
-        session.setForeground(new Color(124, 68, 22));
-        header.add(session, BorderLayout.SOUTH);
-        header.add(button("loadDemo", "Load demo data",
-            () -> loadDemoData()), BorderLayout.EAST);
+        storageStatus.setName("storageStatus");
+        storageStatus.setForeground(new Color(124, 68, 22));
+        header.add(storageStatus, BorderLayout.SOUTH);
+        JPanel actions = row(button("loadDemo", "Load demo data",
+            () -> loadDemoData()));
+        if (controller.isPersistenceEnabled())
+        {
+            actions.add(button("saveNow", "Save now", () ->
+            {
+                controller.saveData();
+                feedback("All pantry and recipe changes are saved.", false);
+            }));
+            retryLoad = button("retryLoad", "Retry loading",
+                () -> loadSavedData());
+            retryLoad.setVisible(false);
+            actions.add(retryLoad);
+        }
+        header.add(actions, BorderLayout.EAST);
         add(header, BorderLayout.NORTH);
         tabs.setName("tabs");
         tabs.addTab("Pantry", pantryPanel());
         tabs.addTab("Recipes", recipesPanel());
         tabs.addTab("Create recipe", createRecipePanel());
+        tabs.addTab("Import recipes", new RecipeImportPanel(controller, recipe ->
+            perform(() ->
+            {
+                boolean added = controller.importRecipe(recipe);
+                if (added)
+                {
+                    showRecipe(recipe);
+                }
+                feedback(added ? "Recipe imported into your collection."
+                    : "This recipe is already saved. Your existing recipe was kept.",
+                    !added);
+            })));
         add(tabs, BorderLayout.CENTER);
         status.setEditable(false);
         status.setBackground(new Color(233, 239, 229));
@@ -135,7 +163,9 @@ public class PantryPalGUI extends JPanel
 
 
     /**
-     * Opens the desktop application. No files or services are accessed.
+     * Opens the desktop application and loads its local save.
+     * The pantrypal.dataFile system property overrides the default save at
+     * user.home/.pantrypal/data.properties. Uses TheMealDB educational access.
      * @param args command-line arguments (none supported)
      * @throws IllegalArgumentException if arguments are supplied or null
      */
@@ -145,12 +175,21 @@ public class PantryPalGUI extends JPanel
         {
             throw new IllegalArgumentException("No arguments are supported.");
         }
+        String configured = System.getProperty("pantrypal.dataFile");
+        Path savePath = configured == null
+            ? Path.of(System.getProperty("user.home"), ".pantrypal",
+                "data.properties") : Path.of(configured);
+        DataStore store = new DataStore(savePath);
         SwingUtilities.invokeLater(() ->
         {
-            PantryPalController session = new PantryPalController();
-            JFrame window = new JFrame("PantryPal - Session prototype");
+            PantryPalController session = new PantryPalController(store,
+                new IngredientMatcher(), RecipeImporter.educationalClient(), null);
+            JFrame window = new JFrame("PantryPal");
             window.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-            window.setContentPane(new PantryPalGUI(session));
+            PantryPalGUI view = new PantryPalGUI(session);
+            window.setContentPane(view);
+            view.storageStatus.setToolTipText(savePath.toAbsolutePath().toString());
+            view.loadSavedData();
             window.setMinimumSize(new Dimension(920, 720));
             window.setSize(1100, 820);
             window.setLocationRelativeTo(null);
@@ -159,19 +198,62 @@ public class PantryPalGUI extends JPanel
                 @Override
                 public void windowClosing(WindowEvent event)
                 {
-                    if (!session.hasUnsavedChanges()
-                        || JOptionPane.showConfirmDialog(window,
-                            "This session is not saved. "
-                                + "Close and lose its data?",
-                            "Close PantryPal", JOptionPane.YES_NO_OPTION)
-                            == JOptionPane.YES_OPTION)
-                    {
-                        window.dispose();
-                    }
+                    view.closeWindow(window);
                 }
             });
             window.setVisible(true);
         });
+    }
+
+
+    private void loadSavedData()
+    {
+        try
+        {
+            controller.loadData();
+            loadFailed = false;
+            retryLoad.setVisible(false);
+            refreshPantry();
+            refreshRecipes();
+            feedback("Saved pantry and recipes loaded. Changes save automatically.",
+                false);
+        }
+        catch (IOException exception)
+        {
+            loadFailed = true;
+            retryLoad.setVisible(true);
+            feedback("Could not load: " + exception.getMessage()
+                + " The save file was left unchanged. Restore or move it, "
+                + "then click Retry loading.", true);
+        }
+    }
+
+
+    private void closeWindow(JFrame window)
+    {
+        if (!controller.hasUnsavedChanges())
+        {
+            window.dispose();
+            return;
+        }
+        int choice = JOptionPane.showOptionDialog(window,
+            "Some changes could not be saved. Save before closing?",
+            "Close PantryPal", JOptionPane.DEFAULT_OPTION,
+            JOptionPane.WARNING_MESSAGE, null,
+            new String[] { "Save and close", "Close without saving", "Cancel" },
+            "Save and close");
+        if (choice == 0)
+        {
+            perform(() ->
+            {
+                controller.saveData();
+                window.dispose();
+            });
+        }
+        else if (choice == 1)
+        {
+            window.dispose();
+        }
     }
 
 
@@ -182,7 +264,7 @@ public class PantryPalGUI extends JPanel
             || controller.getSavedRecipes().length != 0)
         {
             feedback("Demo data requires an empty session. "
-                + "Open a new window by running the app again.", true);
+                + "Your existing pantry and recipes were kept.", true);
             return;
         }
         controller.addPantryIngredient("Rice", 1, Unit.KILOGRAM);
@@ -246,7 +328,8 @@ public class PantryPalGUI extends JPanel
         refreshRecipes();
         feedback("Demo loaded: 8 ingredients and 5 recipes. "
             + "Try Meal Roulette, compare Tomato Pasta, or cook Cheesy Pasta. "
-            + "Demo data lasts only for this session.", false);
+            + (controller.isPersistenceEnabled() ? "Demo data was saved."
+                : "Demo data lasts only for this session."), false);
     }
 
 
@@ -295,7 +378,7 @@ public class PantryPalGUI extends JPanel
                 refreshPantry();
                 refreshComparison();
                 clearPantryForm();
-                feedback("Ingredient added to this session.", false);
+                feedback("Ingredient added.", false);
             }),
             button("pantryUpdate", "Update selected", () ->
             {
@@ -477,7 +560,7 @@ public class PantryPalGUI extends JPanel
         steps.setBorder(BorderFactory.createTitledBorder(
             "Instructions - one step per line"));
         steps.add(new JScrollPane(instructions), BorderLayout.CENTER);
-        steps.add(row(button("recipeCreate", "Save recipe to session", () ->
+        steps.add(row(button("recipeCreate", "Save recipe", () ->
         {
             String[] lines = instructions.getText().isBlank()
                 ? new String[0] : instructions.getText().strip().split("\\R");
@@ -487,7 +570,7 @@ public class PantryPalGUI extends JPanel
                 Effort.valueOf((String)recipeEffort.getSelectedItem()));
             resetRecipeForm();
             showRecipe(recipe);
-            feedback("Recipe saved to this session.", false);
+            feedback("Recipe added to your collection.", false);
         })), BorderLayout.SOUTH);
         panel.add(steps, BorderLayout.SOUTH);
         return panel;
@@ -584,7 +667,9 @@ public class PantryPalGUI extends JPanel
             + time(recipe.getPrepTimeMinutes()) + " min  |  Cook: "
             + time(recipe.getCookTimeMinutes()) + " min  |  Effort: "
             + recipe.getEffort() + "\n\n"
-            + String.join("\n", recipe.getInstructions()));
+            + String.join("\n", recipe.getInstructions())
+            + (recipe.getSourceUrl().isBlank() ? ""
+                : "\n\nSource: " + recipe.getSourceUrl()));
         details.setCaretPosition(0);
         RecipeMatchResult result = controller.compareRecipeWithPantry(recipe);
         comparisonSummary.setText(result.canCook() ? "Ready to cook."
@@ -652,6 +737,12 @@ public class PantryPalGUI extends JPanel
 
     private void feedback(String message, boolean error)
     {
+        storageStatus.setText(!controller.isPersistenceEnabled()
+            ? "Session-only mode: all data is lost when you close."
+            : loadFailed ? "Load failed: changes are blocked to protect your save."
+            : controller.hasUnsavedChanges()
+                ? "Unsaved changes: click Save now to retry."
+                : "Autosave is on. Pantry and recipes are saved locally.");
         status.setForeground(error ? new Color(151, 37, 30)
             : new Color(35, 83, 61));
         status.setText((error ? "Please try again: " : "") + message);
@@ -674,8 +765,17 @@ public class PantryPalGUI extends JPanel
         }
         catch (IOException exception)
         {
+            // Mutation succeeded in memory. Show the current collections even
+            // if an unrelated browse filter contains invalid numeric text.
+            pantryQuery.setText("");
+            recipeQuery.setText("");
+            maxCookTime.setText("");
+            effortFilter.setSelectedIndex(0);
+            refreshPantry();
+            refreshRecipes();
             feedback("Could not save: " + exception.getMessage()
-                + " Your changes remain in this session.", true);
+                + " Your changes remain in this session. Click Save now "
+                + "to retry saving; do not repeat the original action.", true);
         }
     }
 
