@@ -104,8 +104,8 @@ public class PantryPalGUITest extends TestCase
             set("recipeQuery", "nothing");
             set("maxCookTime", "bad");
             click("loadDemo");
-            assertEquals(8, table("pantryTable").getRowCount());
-            assertEquals(5, table("recipeTable").getRowCount());
+            assertEquals(12, table("pantryTable").getRowCount());
+            assertEquals(9, table("recipeTable").getRowCount());
             assertTrue(controller.hasUnsavedChanges());
             assertTrue(message().contains("Demo loaded"));
             int cookable = 0;
@@ -121,15 +121,34 @@ public class PantryPalGUITest extends TestCase
                 {
                     assertFalse(result.canCook());
                     assertEquals(2, result.getMissingIngredients().length);
+                    assertEquals("Flour", result.getMissingIngredients()[0].getName());
+                    assertEquals(1000.0, result.getMissingIngredients()[0]
+                        .getQuantity(), 0.0);
+                    assertEquals("Milk", result.getMissingIngredients()[1].getName());
+                    assertEquals(1.0, result.getMissingIngredients()[1]
+                        .getQuantity(), 0.0);
                 }
                 if (recipe.getName().equals("Tomato Pasta"))
                 {
                     assertFalse(result.canCook());
-                    assertEquals("Tomatoes",
+                    assertEquals("Diced tomatoes",
                         result.getMissingIngredients()[0].getName());
+                    assertEquals(400.0, result.getMissingIngredients()[0]
+                        .getQuantity(), 0.0);
+                    assertEquals(Unit.GRAM, result.getMissingIngredients()[0].getUnit());
                 }
+                if (recipe.getName().equals("Chicken Rice Bowl"))
+                {
+                    assertFalse(result.canCook());
+                    Ingredient[] missing = controller.getPricingShortages(recipe);
+                    assertEquals(1, missing.length);
+                    assertEquals("Chicken breast", missing[0].getName());
+                    assertEquals(600.0, missing[0].getQuantity(), 0.0);
+                    assertEquals(Unit.GRAM, missing[0].getUnit());
+                }
+                assertEquals(0, result.getUncomparableIngredients().length);
             }
-            assertEquals(3, cookable);
+            assertEquals(6, cookable);
             click("mealRoulette");
             assertTrue(message().contains("Meal Roulette picked:"));
             JTable recipes = table("recipeTable");
@@ -149,11 +168,43 @@ public class PantryPalGUITest extends TestCase
                 [0].getQuantity(), 0.000001);
             click("loadDemo");
             assertTrue(message().contains("requires an empty session"));
-            assertEquals(8, controller.getPantryIngredients().length);
-            assertEquals(5, controller.getSavedRecipes().length);
+            assertEquals(12, controller.getPantryIngredients().length);
+            assertEquals(9, controller.getSavedRecipes().length);
             assertEquals(300.0, controller.searchPantryIngredients("Pasta")
                 [0].getQuantity(), 0.0);
         });
+    }
+
+
+    /**
+     * The live demo survives reopening and keeps used stock after cooking.
+     * @throws Exception if persistence or Swing operations fail
+     */
+    public void testDemoPersistence() throws Exception
+    {
+        controller = new PantryPalController(new DataStore(saveFile),
+            new IngredientMatcher(), null, null);
+        SwingUtilities.invokeAndWait(() ->
+        {
+            gui = new PantryPalGUI(controller);
+            click("loadDemo");
+            assertFalse(controller.hasUnsavedChanges());
+            assertTrue(message().contains("Demo data was saved."));
+        });
+        PantryPalController reopened = new PantryPalController(
+            new DataStore(saveFile), new IngredientMatcher(), null, null);
+        reopened.loadData();
+        assertEquals(12, reopened.getPantryIngredients().length);
+        assertEquals(9, reopened.getSavedRecipes().length);
+        Recipe oats = reopened.searchSavedRecipes("Creamy Oats")[0];
+        assertTrue(reopened.cookRecipe(oats));
+        PantryPalController afterCooking = new PantryPalController(
+            new DataStore(saveFile), new IngredientMatcher(), null, null);
+        afterCooking.loadData();
+        assertEquals(420.0, afterCooking.searchPantryIngredients("Rolled oats")
+            [0].getQuantity(), 0.0);
+        assertEquals(0.8, afterCooking.searchPantryIngredients("Milk")
+            [0].getQuantity(), 0.000001);
     }
 
 

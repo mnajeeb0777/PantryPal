@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" role="img" aria-labelledby="title description"><title id="title">PantryPal class architecture</title><desc id="description">PantryPalGUI contains RecipeImportPanel and BrokeModePanel. These views call PantryPalController. The controller owns Pantry and RecipeBook, coordinates RecipeMatcher and IngredientMatcher, saves PantryPalData through DataStore, and uses RecipeImporter and PriceFinder for external services. Selected class relationships and methods are shown.</desc><defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#598565" stroke-width="1.6" stroke-linejoin="round"/></marker></defs><rect width="1920" height="1080" fill="#F7FAF5"/>
+<rect x="60" y="54" width="12" height="75" rx="6" fill="#285D40" stroke="#285D40" stroke-width="2"/>
+<text x="96" y="109" font-size="54" fill="#214D36" font-weight="700" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">PantryPal</text>
+<text x="383" y="109" font-size="40" fill="#56755D" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">/ Class architecture</text>
+<text x="63" y="157" font-size="25" fill="#647C67" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">Java Swing application • key classes, responsibilities and dependencies</text>
+<text x="1858" y="99" font-size="21" fill="#55775D" font-weight="700" font-family="Segoe UI, Arial, sans-serif" text-anchor="end">CS 2114</text>
+<rect x="60" y="185" width="31" height="31" rx="9" fill="#DEECD8" stroke="#DEECD8" stroke-width="2"/>
+<text x="75.5" y="207" font-size="17" fill="#426C4B" font-weight="700" font-family="Segoe UI, Arial, sans-serif" text-anchor="middle">1</text>
+<text x="105" y="210" font-size="21" fill="#55775D" font-weight="600" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">USER INTERFACE</text>
+<rect x="600" y="185" width="31" height="31" rx="9" fill="#DEECD8" stroke="#DEECD8" stroke-width="2"/>
+<text x="615.5" y="207" font-size="17" fill="#426C4B" font-weight="700" font-family="Segoe UI, Arial, sans-serif" text-anchor="middle">2</text>
+<text x="645" y="210" font-size="21" fill="#55775D" font-weight="600" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">APPLICATION CONTROLLER</text>
+<rect x="1360" y="185" width="31" height="31" rx="9" fill="#DEECD8" stroke="#DEECD8" stroke-width="2"/>
+<text x="1375.5" y="207" font-size="17" fill="#426C4B" font-weight="700" font-family="Segoe UI, Arial, sans-serif" text-anchor="middle">3</text>
+<text x="1405" y="210" font-size="21" fill="#55775D" font-weight="600" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">DOMAIN MODEL</text>
+<path d="M500 395 H600" fill="none" stroke="#598565" stroke-width="3"  marker-end="url(#a)"/>
+<text x="550" y="377" font-size="19" fill="#55775D" font-weight="500" font-family="Segoe UI, Arial, sans-serif" text-anchor="middle">calls</text>
+<path d="M1260 395 H1360" fill="none" stroke="#598565" stroke-width="3"  marker-end="url(#a)"/>
+<text x="1310" y="377" font-size="19" fill="#55775D" font-weight="500" font-family="Segoe UI, Arial, sans-serif" text-anchor="middle">owns</text>
+<path d="M930 565 V620 M330 620 H1560" fill="none" stroke="#598565" stroke-width="3"/>
+<path d="M330 620 V680" fill="none" stroke="#598565" stroke-width="3"  marker-end="url(#a)"/>
+<path d="M930 620 V680" fill="none" stroke="#598565" stroke-width="3"  marker-end="url(#a)"/>
+<path d="M1560 620 V680" fill="none" stroke="#598565" stroke-width="3"  marker-end="url(#a)"/>
+<rect x="850" y="600" width="160" height="36" rx="8" fill="#F7FAF5" stroke="#F7FAF5" stroke-width="2"/>
+<text x="930" y="626" font-size="20" fill="#55775D" font-weight="500" font-family="Segoe UI, Arial, sans-serif" text-anchor="middle">coordinates</text>
+<rect x="60" y="235" width="440" height="330" rx="22" fill="#FFFFFF" stroke="#CDDFCD" stroke-width="2"/>
+<text x="88" y="280" font-size="29" fill="#285D40" font-weight="700" font-family="Consolas, monospace" text-anchor="start">PantryPalGUI</text>
+<text x="88" y="315" font-size="21" fill="#647C67" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">Main window, pantry and recipe screens</text>
+<path d="M88 338 h384" stroke="#DFE9DC" stroke-width="2"/>
+<text x="88" y="373" font-size="20" fill="#647C67" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">Contains panels:</text>
+<text x="88" y="411" font-size="25" fill="#284B37" font-weight="600" font-family="Consolas, monospace" text-anchor="start">RecipeImportPanel</text>
+<text x="88" y="442" font-size="20" fill="#647C67" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">Search, review and save import drafts</text>
+<text x="88" y="483" font-size="25" fill="#284B37" font-weight="600" font-family="Consolas, monospace" text-anchor="start">BrokeModePanel</text>
+<text x="88" y="514" font-size="20" fill="#647C67" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">Review products and show price estimates</text>
+<text x="88" y="546" font-size="19" fill="#647C67" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">All three views call the controller.</text>
+<rect x="600" y="235" width="660" height="330" rx="22" fill="#285D40" stroke="#285D40" stroke-width="2"/>
+<text x="631" y="285" font-size="33" fill="#FFFFFF" font-weight="700" font-family="Consolas, monospace" text-anchor="start">PantryPalController</text>
+<text x="631" y="324" font-size="23" fill="#DEEDDD" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">Coordinates state, matching, saving and API access</text>
+<path d="M631 346 H1229" stroke="#548166" stroke-width="2"/>
+<text x="631" y="383" font-size="24" fill="#FFFFFF" font-weight="400" font-family="Consolas, monospace" text-anchor="start">compareRecipeWithPantry()</text>
+<text x="631" y="420" font-size="24" fill="#FFFFFF" font-weight="400" font-family="Consolas, monospace" text-anchor="start">selectMealRouletteRecipe()</text>
+<text x="631" y="457" font-size="24" fill="#FFFFFF" font-weight="400" font-family="Consolas, monospace" text-anchor="start">cookRecipe()   •   saveData()</text>
+<text x="631" y="503" font-size="20" fill="#DEEDDD" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">Saved drafts:</text>
+<text x="631" y="539" font-size="23" fill="#FFFFFF" font-weight="400" font-family="Consolas, monospace" text-anchor="start">LinkedChain&lt;RecipeImportDraft&gt;</text>
+<rect x="1360" y="235" width="500" height="330" rx="22" fill="#FFFFFF" stroke="#CDDFCD" stroke-width="2"/>
+<text x="1388" y="278" font-size="27" fill="#285D40" font-weight="700" font-family="Consolas, monospace" text-anchor="start">Pantry</text>
+<text x="1388" y="309" font-size="22" fill="#647C67" font-weight="400" font-family="Consolas, monospace" text-anchor="start">LinkedChain&lt;Ingredient&gt;</text>
+<text x="1388" y="352" font-size="27" fill="#285D40" font-weight="700" font-family="Consolas, monospace" text-anchor="start">RecipeBook</text>
+<text x="1388" y="383" font-size="22" fill="#647C67" font-weight="400" font-family="Consolas, monospace" text-anchor="start">LinkedChain&lt;Recipe&gt;</text>
+<path d="M1388 408 h444" stroke="#DFE9DC" stroke-width="2"/>
+<text x="1388" y="446" font-size="25" fill="#284B37" font-weight="600" font-family="Consolas, monospace" text-anchor="start">Recipe</text>
+<text x="1510" y="446" font-size="22" fill="#647C67" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">→ ingredients + Effort</text>
+<text x="1388" y="483" font-size="25" fill="#284B37" font-weight="600" font-family="Consolas, monospace" text-anchor="start">Ingredient</text>
+<text x="1560" y="483" font-size="22" fill="#647C67" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">→ quantity + Unit</text>
+<text x="1388" y="535" font-size="19" fill="#647C67" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">Recipe also stores ingredients in LinkedChain.</text>
+<rect x="60" y="633" width="31" height="31" rx="9" fill="#DEECD8" stroke="#DEECD8" stroke-width="2"/>
+<text x="75.5" y="655" font-size="17" fill="#426C4B" font-weight="700" font-family="Segoe UI, Arial, sans-serif" text-anchor="middle">4</text>
+<text x="105" y="658" font-size="21" fill="#55775D" font-weight="600" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">MATCHING &amp; RESULTS</text>
+<rect x="660" y="633" width="31" height="31" rx="9" fill="#DEECD8" stroke="#DEECD8" stroke-width="2"/>
+<text x="675.5" y="655" font-size="17" fill="#426C4B" font-weight="700" font-family="Segoe UI, Arial, sans-serif" text-anchor="middle">5</text>
+<text x="705" y="658" font-size="21" fill="#55775D" font-weight="600" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">LOCAL PERSISTENCE</text>
+<rect x="1260" y="633" width="31" height="31" rx="9" fill="#DEECD8" stroke="#DEECD8" stroke-width="2"/>
+<text x="1275.5" y="655" font-size="17" fill="#426C4B" font-weight="700" font-family="Segoe UI, Arial, sans-serif" text-anchor="middle">6</text>
+<text x="1305" y="658" font-size="21" fill="#55775D" font-weight="600" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">EXTERNAL INTEGRATIONS</text>
+<rect x="60" y="680" width="540" height="325" rx="22" fill="#FFFFFF" stroke="#CDDFCD" stroke-width="2"/>
+<text x="88" y="724" font-size="27" fill="#285D40" font-weight="700" font-family="Consolas, monospace" text-anchor="start">RecipeMatcher</text>
+<text x="88" y="755" font-size="21" fill="#647C67" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">compareRecipe() allocates pantry stock</text>
+<path d="M110 772 V802" fill="none" stroke="#598565" stroke-width="3"  marker-end="url(#a)"/>
+<text x="137" y="793" font-size="19" fill="#647C67" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">uses</text>
+<text x="88" y="836" font-size="26" fill="#284B37" font-weight="600" font-family="Consolas, monospace" text-anchor="start">IngredientMatcher</text>
+<text x="88" y="867" font-size="20" fill="#647C67" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">Name matching and compatible unit conversion</text>
+<path d="M88 887 h484" stroke="#DFE9DC" stroke-width="2"/>
+<text x="88" y="917" font-size="19" fill="#647C67" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">RecipeMatcher returns:</text>
+<text x="88" y="950" font-size="24" fill="#284B37" font-weight="600" font-family="Consolas, monospace" text-anchor="start">RecipeMatchResult</text>
+<text x="88" y="980" font-size="20" fill="#647C67" font-weight="400" font-family="Consolas, monospace" text-anchor="start">contains IngredientMatch[]; canCook()</text>
+<rect x="660" y="680" width="540" height="325" rx="22" fill="#FFFFFF" stroke="#CDDFCD" stroke-width="2"/>
+<text x="688" y="724" font-size="27" fill="#285D40" font-weight="700" font-family="Consolas, monospace" text-anchor="start">DataStore</text>
+<text x="688" y="755" font-size="22" fill="#647C67" font-weight="400" font-family="Consolas, monospace" text-anchor="start">load() / save() ↔ data.properties</text>
+<path d="M688 777 h484" stroke="#DFE9DC" stroke-width="2"/>
+<text x="688" y="815" font-size="26" fill="#284B37" font-weight="600" font-family="Consolas, monospace" text-anchor="start">PantryPalData</text>
+<text x="688" y="846" font-size="20" fill="#647C67" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">Snapshot read and written by DataStore</text>
+<text x="688" y="884" font-size="22" fill="#284B37" font-weight="400" font-family="Consolas, monospace" text-anchor="start">Ingredient[]</text>
+<text x="688" y="917" font-size="22" fill="#284B37" font-weight="400" font-family="Consolas, monospace" text-anchor="start">Recipe[]</text>
+<text x="688" y="950" font-size="22" fill="#284B37" font-weight="400" font-family="Consolas, monospace" text-anchor="start">RecipeImportDraft[]</text>
+<text x="688" y="982" font-size="20" fill="#647C67" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">Autosave after changes; reload on startup</text>
+<rect x="1260" y="680" width="600" height="325" rx="22" fill="#FFFFFF" stroke="#CDDFCD" stroke-width="2"/>
+<text x="1288" y="724" font-size="26" fill="#285D40" font-weight="700" font-family="Consolas, monospace" text-anchor="start">RecipeImporter</text>
+<path d="M1545 716 H1610" fill="none" stroke="#598565" stroke-width="3" stroke-dasharray="8 7" marker-end="url(#a)"/>
+<text x="1624" y="724" font-size="24" fill="#284B37" font-weight="600" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">TheMealDB</text>
+<text x="1288" y="762" font-size="21" fill="#647C67" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">Returns RecipeImportDraft objects for review</text>
+<path d="M1288 786 h544" stroke="#DFE9DC" stroke-width="2"/>
+<text x="1288" y="828" font-size="26" fill="#285D40" font-weight="700" font-family="Consolas, monospace" text-anchor="start">PriceFinder</text>
+<path d="M1500 820 H1570" fill="none" stroke="#598565" stroke-width="3" stroke-dasharray="8 7" marker-end="url(#a)"/>
+<text x="1585" y="828" font-size="23" fill="#284B37" font-weight="600" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">SerpApi / Walmart</text>
+<text x="1288" y="865" font-size="20" fill="#647C67" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">Returns offers through PriceFinder.SearchResult</text>
+<text x="1288" y="898" font-size="20" fill="#647C67" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">StoreOffer holds package, price and store data</text>
+<path d="M1288 919 h544" stroke="#DFE9DC" stroke-width="2"/>
+<text x="1288" y="953" font-size="23" fill="#284B37" font-weight="600" font-family="Consolas, monospace" text-anchor="start">Json</text>
+<text x="1362" y="953" font-size="21" fill="#647C67" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">Shared API response parser</text>
+<text x="1288" y="982" font-size="20" fill="#647C67" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">PriceFinder also uses IngredientMatcher.</text>
+<text x="60" y="1048" font-size="18" fill="#6B7D6B" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">Selected class relationships • arrows show usage, not inheritance</text>
+<path d="M1200 1042 H1250" stroke="#598565" stroke-width="3"/><path d="M1515 1042 H1565" stroke="#598565" stroke-width="3" stroke-dasharray="8 7"/>
+<text x="1265" y="1048" font-size="18" fill="#6B7D6B" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">Java dependency</text>
+<text x="1580" y="1048" font-size="18" fill="#6B7D6B" font-weight="400" font-family="Segoe UI, Arial, sans-serif" text-anchor="start">External API call</text>
+</svg>

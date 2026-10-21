@@ -290,6 +290,10 @@ public class PantryPalGUI extends JPanel
         controller.addPantryIngredient("Butter", 100, Unit.GRAM);
         controller.addPantryIngredient("Olive oil", 8, Unit.TABLESPOON);
         controller.addPantryIngredient("Salt", 10, Unit.TEASPOON);
+        controller.addPantryIngredient("Black beans", 400, Unit.GRAM);
+        controller.addPantryIngredient("Soy sauce", 100, Unit.MILLILITER);
+        controller.addPantryIngredient("Broccoli", 300, Unit.GRAM);
+        controller.addPantryIngredient("Rolled oats", 500, Unit.GRAM);
 
         controller.addCustomRecipe("Cheesy Pasta", new Ingredient[] {
             demoIngredient("Pasta", 200, Unit.GRAM),
@@ -319,10 +323,10 @@ public class PantryPalGUI extends JPanel
             5, 20, Effort.EASY);
         controller.addCustomRecipe("Tomato Pasta", new Ingredient[] {
             demoIngredient("Pasta", 200, Unit.GRAM),
-            demoIngredient("Tomatoes", 3, Unit.COUNT),
+            demoIngredient("Diced tomatoes", 400, Unit.GRAM),
             demoIngredient("Olive oil", 2, Unit.TABLESPOON),
             demoIngredient("Salt", 0.5, Unit.TEASPOON) },
-            new String[] { "Chop the tomatoes and simmer them in olive oil.",
+            new String[] { "Simmer the diced tomatoes in olive oil.",
                 "Boil the pasta until tender and drain.",
                 "Combine the pasta and tomatoes, then season with salt." },
             10, 20, Effort.MEDIUM);
@@ -335,14 +339,51 @@ public class PantryPalGUI extends JPanel
                 "Heat a pan and grease it with a little butter.",
                 "Cook small portions of batter on both sides until set." },
             10, 30, Effort.MEDIUM);
+        controller.addCustomRecipe("Egg Fried Rice", new Ingredient[] {
+            demoIngredient("Rice", 250, Unit.GRAM),
+            demoIngredient("Eggs", 2, Unit.COUNT),
+            demoIngredient("Soy sauce", 15, Unit.MILLILITER),
+            demoIngredient("Olive oil", 1, Unit.TABLESPOON) },
+            new String[] { "Cook the rice according to the package instructions.",
+                "Heat the oil in a pan and scramble the eggs.",
+                "Add the rice and soy sauce, then stir-fry until hot." },
+            5, 20, Effort.MEDIUM);
+        controller.addCustomRecipe("Broccoli Bean Rice Bowl", new Ingredient[] {
+            demoIngredient("Rice", 200, Unit.GRAM),
+            demoIngredient("Broccoli", 150, Unit.GRAM),
+            demoIngredient("Black beans", 100, Unit.GRAM),
+            demoIngredient("Soy sauce", 1, Unit.TABLESPOON),
+            demoIngredient("Olive oil", 1, Unit.TABLESPOON) },
+            new String[] { "Cook the rice and steam the broccoli.",
+                "Heat the black beans and broccoli in olive oil.",
+                "Serve over rice and stir in the soy sauce." },
+            5, 20, Effort.EASY);
+        controller.addCustomRecipe("Creamy Oats", new Ingredient[] {
+            demoIngredient("Rolled oats", 80, Unit.GRAM),
+            demoIngredient("Milk", 200, Unit.MILLILITER),
+            demoIngredient("Salt", 0.125, Unit.TEASPOON) },
+            new String[] { "Combine the oats, milk, and salt in a saucepan.",
+                "Simmer gently, stirring until the oats are tender.",
+                "Add a little water if needed and serve warm." },
+            2, 5, Effort.EASY);
+        controller.addCustomRecipe("Chicken Rice Bowl", new Ingredient[] {
+            demoIngredient("Chicken breast", 600, Unit.GRAM),
+            demoIngredient("Rice", 300, Unit.GRAM),
+            demoIngredient("Broccoli", 200, Unit.GRAM),
+            demoIngredient("Soy sauce", 2, Unit.TABLESPOON),
+            demoIngredient("Olive oil", 1, Unit.TABLESPOON) },
+            new String[] { "Cook the rice and steam the broccoli.",
+                "Cut the chicken into pieces and cook thoroughly in the oil.",
+                "Stir in the soy sauce and serve with the rice and broccoli." },
+            10, 20, Effort.MEDIUM);
         pantryQuery.setText("");
         recipeQuery.setText("");
         maxCookTime.setText("");
         effortFilter.setSelectedIndex(0);
         refreshPantry();
         refreshRecipes();
-        feedback("Demo loaded: 8 ingredients and 5 recipes. "
-            + "Try Meal Roulette, compare Tomato Pasta, or cook Cheesy Pasta. "
+        feedback("Demo loaded: 12 ingredients and 9 recipes; 6 are ready to cook. "
+            + "Try Meal Roulette, cook Cheesy Pasta, or estimate Chicken Rice Bowl. "
             + (controller.isPersistenceEnabled() ? "Demo data was saved."
                 : "Demo data lasts only for this session."), false);
     }
