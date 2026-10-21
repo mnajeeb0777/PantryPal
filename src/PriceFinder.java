@@ -110,7 +110,8 @@ public class PriceFinder
         if (Boolean.getBoolean("pantrypal.pricingDisabled")) { return null; }
         try
         {
-            Path path = Path.of(System.getProperty("pantrypal.priceConfig", ".env.local"));
+            Path path = configurationPath(Path.of(System.getProperty("user.dir")),
+                applicationLocation(), System.getProperty("pantrypal.priceConfig"));
             Map<String, String> environment = new LinkedHashMap<String, String>();
             environment.put("SERPAPI_API_KEY", System.getenv("SERPAPI_API_KEY"));
             environment.put("WALMART_STORE_ID", System.getenv("WALMART_STORE_ID"));
@@ -119,6 +120,35 @@ public class PriceFinder
                 values[0], null, new IngredientMatcher(), values[1], Clock.systemUTC());
         }
         catch (IOException | IllegalArgumentException exception) { return null; }
+    }
+
+    private static Path applicationLocation()
+    {
+        try
+        {
+            java.security.CodeSource source = PriceFinder.class.getProtectionDomain().getCodeSource();
+            return source == null ? null : Path.of(source.getLocation().toURI());
+        }
+        catch (java.net.URISyntaxException | IllegalArgumentException | SecurityException exception)
+        { return null; }
+    }
+
+    /** Resolves local settings independently of an IDE or shortcut's working directory. */
+    static Path configurationPath(Path workingDirectory, Path application, String override)
+    {
+        if (override != null)
+        { return workingDirectory.resolve(Path.of(override)).normalize(); }
+        Path local = workingDirectory.resolve(".env.local");
+        if (Files.exists(local)) { return local; }
+        Path directory = application == null ? null
+            : Files.isRegularFile(application) ? application.getParent() : application;
+        for (int depth=0; directory != null && depth<=3; depth++, directory=directory.getParent())
+        {
+            Path candidate = directory.resolve(".env.local");
+            boolean projectRoot = Files.isRegularFile(directory.resolve("src/PantryPalGUI.java"));
+            if ((depth == 0 || projectRoot) && Files.isRegularFile(candidate)) { return candidate; }
+        }
+        return local;
     }
 
     /** Package-level configuration seam: tests never read the user's real credentials. */

@@ -161,6 +161,51 @@ public class PriceFinderTest extends TestCase
         }
         finally{TestFixtures.deleteDirectory(dir);}
     }
+    public void testConfigurationFoundOutsideProjectWorkingDirectory() throws Exception
+    {
+        Path dir=TestFixtures.temporaryDirectory();
+        try
+        {
+            Path project=dir.resolve("PantryPal");
+            Path classes=project.resolve("build/classes");
+            Path eclipse=project.resolve("bin");
+            Path elsewhere=dir.resolve("elsewhere");
+            Files.createDirectories(classes);Files.createDirectories(eclipse);
+            Files.createDirectories(elsewhere);Files.createDirectories(project.resolve("src"));
+            Files.writeString(project.resolve("src/PantryPalGUI.java"), "// Project marker");
+            Path config=project.resolve(".env.local");
+            Files.writeString(config, "SERPAPI_API_KEY=local-fake-key\n");
+            assertEquals(config, PriceFinder.configurationPath(elsewhere, classes, null));
+            assertEquals(config, PriceFinder.configurationPath(elsewhere, eclipse, null));
+            assertEquals("local-fake-key", PriceFinder.readConfiguration(
+                PriceFinder.configurationPath(elsewhere, classes, null), Collections.emptyMap())[0]);
+            Files.writeString(elsewhere.resolve(".env.local"), "SERPAPI_API_KEY=working-fake-key\n");
+            assertEquals(elsewhere.resolve(".env.local"),
+                PriceFinder.configurationPath(elsewhere, classes, null));
+            Path override=elsewhere.resolve("custom.properties");
+            assertEquals(override, PriceFinder.configurationPath(elsewhere, classes, "custom.properties"));
+            assertEquals(config, PriceFinder.configurationPath(elsewhere, classes, config.toString()));
+        }
+        finally { TestFixtures.deleteDirectory(dir); }
+    }
+
+    public void testConfigurationBesideJarAndNoUnrelatedAncestorFallback() throws Exception
+    {
+        Path dir=TestFixtures.temporaryDirectory();
+        try
+        {
+            Path deployed=dir.resolve("deployed");Path elsewhere=dir.resolve("elsewhere");
+            Files.createDirectories(deployed);Files.createDirectories(elsewhere);
+            Path jar=deployed.resolve("PantryPal.jar");Files.writeString(jar, "placeholder");
+            Path config=deployed.resolve(".env.local");Files.writeString(config, "SERPAPI_API_KEY=fake-key\n");
+            assertEquals(config, PriceFinder.configurationPath(elsewhere, jar, null));
+            Files.delete(config);Files.writeString(dir.resolve(".env.local"), "SERPAPI_API_KEY=unrelated-key\n");
+            assertEquals(elsewhere.resolve(".env.local"), PriceFinder.configurationPath(elsewhere, jar, null));
+            assertEquals(elsewhere.resolve(".env.local"), PriceFinder.configurationPath(elsewhere, null, null));
+        }
+        finally { TestFixtures.deleteDirectory(dir); }
+    }
+
     public void testBoundedBody() throws Exception
     {
         java.net.http.HttpResponse.BodySubscriber<String> body=PriceFinder.limitedBody();

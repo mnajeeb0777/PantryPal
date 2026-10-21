@@ -230,7 +230,7 @@ public class PantryPalAcceptanceTest extends TestCase
         {
             try
             {
-                for (int[] size : new int[][] {{1100, 820}, {920, 720}})
+                for (int[] size : new int[][] {{1920, 1080}, {1440, 940}, {1100, 820}, {920, 720}})
                 {
                     gui.setSize(size[0], size[1]); layout(gui); layout(gui);
                     BufferedImage image = new BufferedImage(size[0], size[1], BufferedImage.TYPE_INT_RGB);

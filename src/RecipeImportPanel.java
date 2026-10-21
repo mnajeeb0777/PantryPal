@@ -1,5 +1,4 @@
 import java.awt.BorderLayout;
-import java.awt.FlowLayout;
 import java.io.IOException;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
@@ -36,7 +35,7 @@ public class RecipeImportPanel extends JPanel
     private final JButton search = new JButton("Search TheMealDB");
     private final JButton cancel = new JButton("Cancel search");
     private final JButton save = new JButton("Import reviewed recipe");
-    private final JLabel message = new JLabel("Search by recipe name.");
+    private final JLabel message = AppTheme.wrappingLabel("Search by recipe name.");
     private final JTextField prep = new JTextField(4);
     private final JTextField cook = new JTextField(4);
     private final JComboBox<Effort> effort = new JComboBox<Effort>(Effort.values());
@@ -71,7 +70,9 @@ public class RecipeImportPanel extends JPanel
         this.controller = controller;
         this.importRecipe = importRecipe;
         this.feedback = feedback;
-        setLayout(new BorderLayout(8, 8));
+        AppTheme.install();
+        setLayout(new BorderLayout(14, 18));
+        setOpaque(false);
         query.setName("externalQuery");
         search.setName("externalSearch");
         cancel.setName("externalCancel");
@@ -87,7 +88,8 @@ public class RecipeImportPanel extends JPanel
         cook.setName("importCook");
         effort.setName("importEffort");
         JPanel top = new JPanel(new BorderLayout());
-        JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        query.setColumns(14);
+        JPanel actions = AppTheme.flow();
         actions.add(query); actions.add(search); actions.add(cancel); actions.add(savedLater);
         top.add(actions, BorderLayout.NORTH);
         top.add(message, BorderLayout.SOUTH);
@@ -98,29 +100,45 @@ public class RecipeImportPanel extends JPanel
         review.getTableHeader().setReorderingAllowed(false);
         review.getColumnModel().getColumn(3).setCellEditor(
             new DefaultCellEditor(new JComboBox<Unit>(Unit.values())));
-        JPanel editor = new JPanel(new BorderLayout(6, 6));
-        editor.add(new JLabel("Review every row. Blank quantity/unit needs correction; "
-            + "use Save for later if you do not know an amount."), BorderLayout.NORTH);
-        editor.add(new JScrollPane(review), BorderLayout.CENTER);
+        JPanel editor = new JPanel(new BorderLayout(10, 12));
+        editor.add(AppTheme.note("Review every ingredient and its original measurement. "
+            + "Correct missing quantities or units, or save an unfinished recipe for later."), BorderLayout.NORTH);
+        review.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        int[] widths = { 210, 220, 120, 160 };
+        for (int column=0; column<widths.length; column++)
+        { review.getColumnModel().getColumn(column).setPreferredWidth(widths[column]); }
+        JScrollPane ingredientScroll = new JScrollPane(review);
+        ingredientScroll.setColumnHeaderView(review.getTableHeader());
+        editor.add(ingredientScroll, BorderLayout.CENTER);
+        AppTheme.height(editor, 350);
         instructions.setEditable(false);
         instructions.setLineWrap(true);
         instructions.setWrapStyleWord(true);
         JPanel bottom = new JPanel(new BorderLayout());
         bottom.add(new JScrollPane(instructions), BorderLayout.CENTER);
-        JPanel metadata = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        instructions.setRows(5);
+        instructions.setColumns(0);
+        JPanel metadata = AppTheme.flow();
         metadata.add(new JLabel("Prep minutes (optional)")); metadata.add(prep);
         metadata.add(new JLabel("Cook minutes (optional)")); metadata.add(cook);
         metadata.add(effort);
-        JPanel reviewActions = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel reviewActions = AppTheme.flow();
         reviewActions.add(save); reviewActions.add(saveLater); reviewActions.add(removeDraft);
         JPanel footer = new JPanel(new BorderLayout());
         footer.add(metadata, BorderLayout.NORTH);
         footer.add(reviewActions, BorderLayout.SOUTH);
         bottom.add(footer, BorderLayout.SOUTH);
-        editor.add(bottom, BorderLayout.SOUTH);
-        JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
-            new JScrollPane(results), editor);
-        split.setResizeWeight(0.3);
+        AppTheme.height(bottom, 350);
+        JPanel reviewPage = AppTheme.formPage(AppTheme.card("2. Review ingredients", editor),
+            AppTheme.card("3. Instructions & saving", bottom));
+        JScrollPane resultScroll = new JScrollPane(results);
+        resultScroll.setColumnHeaderView(results.getTableHeader());
+        results.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        results.getColumnModel().getColumn(0).setPreferredWidth(240);
+        results.getColumnModel().getColumn(1).setPreferredWidth(150);
+        results.getColumnModel().getColumn(2).setPreferredWidth(160);
+        JSplitPane split = AppTheme.adaptiveSplit(AppTheme.card("1. Search results", resultScroll),
+            AppTheme.pageScroll(reviewPage), 0.30);
         add(split, BorderLayout.CENTER);
         cancel.setEnabled(false);
         save.setEnabled(false);
@@ -139,6 +157,10 @@ public class RecipeImportPanel extends JPanel
         {
             if (!event.getValueIsAdjusting()) { selectDraft(); }
         });
+        search.putClientProperty("theme.button", "primary");
+        save.putClientProperty("theme.button", "primary");
+        removeDraft.putClientProperty("theme.button", "danger");
+        AppTheme.apply(this, 1.0);
     }
 
     private void startSearch()

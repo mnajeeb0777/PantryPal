@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JComboBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -904,6 +905,78 @@ public class PantryPalGUITest extends TestCase
             }
             throw new AssertionError("main must open the application.");
         });
+    }
+
+
+    /** Enlarging fullscreen text preserves navigation, cooking and underlying values. */
+    public void testReadableNavigationAndZoom() throws Exception
+    {
+        SwingUtilities.invokeAndWait(() ->
+        {
+            click("loadDemo");
+            gui.setSize(1920, 1080);
+            click("navigation1");
+            combo("textSize").setSelectedItem("130%");
+            layoutView(gui);
+            assertEquals(1, ((JTabbedPane)find(gui, "tabs")).getSelectedIndex());
+            assertTrue(table("recipeTable").getFont().getSize() >= 23);
+            assertTrue(table("recipeTable").getRowHeight() >= 62);
+            assertEquals(Boolean.TRUE, ((JButton)find(gui, "navigation1"))
+                .getClientProperty("theme.selected"));
+            JTable recipes = table("recipeTable");
+            for (int row=0; row<recipes.getRowCount(); row++)
+            {
+                if ("Cheesy Pasta".equals(recipes.getValueAt(row, 0)))
+                { recipes.setRowSelectionInterval(row, row);break; }
+            }
+            click("recipeCook");
+            assertTrue(message().contains("Cooked!"));
+            click("navigation0");
+            assertEquals(300.0, controller.searchPantryIngredients("Pasta")[0]
+                .getQuantity(), 0.0);
+            combo("textSize").setSelectedItem("100%");
+            assertEquals(18, table("pantryTable").getFont().getSize());
+        });
+    }
+
+
+    /** At 150% text in a small window, each main action can be scrolled fully into view. */
+    public void testLargeTextActionsRemainReachable() throws Exception
+    {
+        SwingUtilities.invokeAndWait(() ->
+        {
+            click("loadDemo");
+            gui.setSize(1000, 760);
+            combo("textSize").setSelectedItem("150%");
+            String[] actions = { "pantryAdd", "recipeCook", "recipeCreate",
+                "externalImport", "priceUse" };
+            for (int i=0; i<actions.length; i++)
+            {
+                click("navigation" + i);
+                layoutView(gui);
+                JComponent button = (JComponent)find(gui, actions[i]);
+                button.scrollRectToVisible(new java.awt.Rectangle(0, 0,
+                    button.getWidth(), button.getHeight()));
+                java.awt.Rectangle visible = button.getVisibleRect();
+                assertTrue(actions[i] + " must have a usable size", button.getHeight() >= 40);
+                assertTrue(actions[i] + " must be reachable without clipping",
+                    visible.height >= button.getHeight()-2 && visible.width >= button.getWidth()-2);
+            }
+        });
+    }
+
+
+    private static void layoutView(Container parent)
+    {
+        for (int pass=0; pass<4; pass++) { layoutChildren(parent); }
+    }
+
+
+    private static void layoutChildren(Container parent)
+    {
+        parent.doLayout();
+        for (Component child : parent.getComponents())
+        { if (child instanceof Container) { layoutChildren((Container)child); } }
     }
 
 

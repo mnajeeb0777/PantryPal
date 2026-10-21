@@ -1,7 +1,7 @@
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
+import java.awt.Component;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
@@ -15,6 +15,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
@@ -43,10 +45,15 @@ public class PantryPalGUI extends JPanel
 {
     private final PantryPalController controller;
     private final JTextArea status = textArea("status", 2);
-    private final JLabel storageStatus = new JLabel();
+    private final JLabel storageStatus = AppTheme.wrappingLabel("");
     private boolean loadFailed;
     private JButton retryLoad;
     private final JTabbedPane tabs = new JTabbedPane();
+    private final JLabel pageHeading = AppTheme.type(new JLabel(), 34, true);
+    private final JLabel pageDescription = AppTheme.type(AppTheme.wrappingLabel(""), 17, false);
+    private final JLabel collectionSummary = AppTheme.type(AppTheme.wrappingLabel(""), 17, false);
+    private final JButton[] navigation = new JButton[5];
+    private final JComboBox<String> textSize = choices("textSize", "100%", "115%", "130%", "150%");
     private RecipeImportPanel importPanel;
     private BrokeModePanel brokePanel;
     private final JTextField pantryQuery = field("pantryQuery");
@@ -65,10 +72,10 @@ public class PantryPalGUI extends JPanel
         choices("effortFilter", "Any effort", "EASY", "MEDIUM", "HARD",
             "UNKNOWN");
     private final JTable recipeTable = table("recipeTable",
-        "Recipe", "Cook minutes", "Effort");
+        "Recipe", "Minutes", "Effort");
     private Recipe[] shownRecipes = new Recipe[0];
     private final JTextArea details = textArea("recipeDetails", 4);
-    private final JLabel comparisonSummary = new JLabel("Select a recipe.");
+    private final JLabel comparisonSummary = AppTheme.wrappingLabel("Select a recipe.");
     private final JTable comparisonTable = table("comparisonTable",
         "Ingredient", "Required", "Allocated", "Missing", "Unit", "Status");
 
@@ -106,36 +113,24 @@ public class PantryPalGUI extends JPanel
                 "Create the GUI on the Swing EDT.");
         }
         this.controller = controller;
-        setLayout(new BorderLayout(12, 12));
-        setBorder(BorderFactory.createEmptyBorder(18, 20, 14, 20));
-        setBackground(new Color(244, 247, 241));
-        JPanel header = new JPanel(new BorderLayout(4, 6));
+        AppTheme.install();
+        setLayout(new BorderLayout());
+        putClientProperty("theme.surface", AppTheme.BACKGROUND);
+        setBackground(AppTheme.BACKGROUND);
+        JPanel workspace = new JPanel(new BorderLayout(0, 18));
+        workspace.setBorder(BorderFactory.createEmptyBorder(25, 26, 18, 26));
+        JPanel header = new JPanel(new BorderLayout(10, 8));
         header.setOpaque(false);
-        JLabel title = new JLabel("PantryPal");
-        title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 30));
-        title.setForeground(new Color(35, 83, 61));
-        header.add(title, BorderLayout.NORTH);
-        header.add(new JLabel(
-            "Know what you have. Make something good."), BorderLayout.CENTER);
+        pageHeading.setForeground(AppTheme.INK);
+        pageDescription.setForeground(AppTheme.MUTED);
+        collectionSummary.setForeground(AppTheme.MUTED);
+        header.add(pageHeading, BorderLayout.NORTH);
+        header.add(pageDescription, BorderLayout.CENTER);
+        header.add(collectionSummary, BorderLayout.SOUTH);
         storageStatus.setName("storageStatus");
-        storageStatus.setForeground(new Color(124, 68, 22));
-        header.add(storageStatus, BorderLayout.SOUTH);
-        JPanel actions = row(button("loadDemo", "Load demo data",
-            () -> loadDemoData()));
-        if (controller.isPersistenceEnabled())
-        {
-            actions.add(button("saveNow", "Save now", () ->
-            {
-                controller.saveData();
-                feedback("All pantry and recipe changes are saved.", false);
-            }));
-            retryLoad = button("retryLoad", "Retry loading",
-                () -> loadSavedData());
-            retryLoad.setVisible(false);
-            actions.add(retryLoad);
-        }
-        header.add(actions, BorderLayout.EAST);
-        add(header, BorderLayout.NORTH);
+        AppTheme.type(storageStatus, 16, false);
+        storageStatus.setForeground(AppTheme.MUTED);
+        workspace.add(header, BorderLayout.NORTH);
         tabs.setName("tabs");
         tabs.addTab("Pantry", pantryPanel());
         tabs.addTab("Recipes", recipesPanel());
@@ -155,18 +150,38 @@ public class PantryPalGUI extends JPanel
         tabs.addTab("Import recipes", importPanel);
         brokePanel = new BrokeModePanel(controller);
         tabs.addTab("Broke Mode", brokePanel);
+        tabs.setUI(AppTheme.hiddenTabs());
+        tabs.setFocusable(false);
         tabs.addChangeListener(event ->
         {
+            updateNavigation();
             boolean pricing = tabs.getSelectedComponent() == brokePanel;
             controller.setBrokeModeEnabled(pricing);
             if (!pricing) { brokePanel.cancelSearch(); }
             else { brokePanel.refreshValidity(); }
         });
-        add(tabs, BorderLayout.CENTER);
+        workspace.add(tabs, BorderLayout.CENTER);
+        JPanel sidebar = buildSidebar();
+        add(sidebar, BorderLayout.WEST);
+        add(workspace, BorderLayout.CENTER);
         status.setEditable(false);
-        status.setBackground(new Color(233, 239, 229));
-        status.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
-        add(status, BorderLayout.SOUTH);
+        AppTheme.type(status, 17, false);
+        status.setBackground(AppTheme.TINT);
+        JPanel footer = new JPanel(new BorderLayout(0, 7));
+        JScrollPane notification = new JScrollPane(status);
+        notification.setPreferredSize(new Dimension(0, 72));
+        footer.add(notification, BorderLayout.CENTER);
+        footer.add(storageStatus, BorderLayout.SOUTH);
+        workspace.add(footer, BorderLayout.SOUTH);
+        textSize.addActionListener(event ->
+        {
+            int percent = Integer.parseInt(((String)textSize.getSelectedItem()).replace("%", ""));
+            AppTheme.apply(this, percent / 100.0);
+            sidebar.setPreferredSize(new Dimension((int)(238 * Math.min(1.2, percent / 100.0)), 0));
+            revalidate(); repaint();
+        });
+        AppTheme.apply(this, 1.0);
+        updateNavigation();
         refreshPantry();
         refreshRecipes();
         feedback("Load demo data, add pantry ingredients, or create a recipe.",
@@ -203,8 +218,8 @@ public class PantryPalGUI extends JPanel
             window.setContentPane(view);
             view.storageStatus.setToolTipText(savePath.toAbsolutePath().toString());
             view.loadSavedData();
-            window.setMinimumSize(new Dimension(920, 720));
-            window.setSize(1100, 820);
+            window.setMinimumSize(new Dimension(1000, 760));
+            window.setSize(1440, 940);
             window.setLocationRelativeTo(null);
             window.addWindowListener(new WindowAdapter()
             {
@@ -216,6 +231,106 @@ public class PantryPalGUI extends JPanel
             });
             window.setVisible(true);
         });
+    }
+
+
+    private JPanel buildSidebar()
+    {
+        JPanel sidebar = new JPanel(new BorderLayout(0, 32));
+        sidebar.putClientProperty("theme.surface", AppTheme.GREEN);
+        sidebar.setBackground(AppTheme.GREEN);
+        sidebar.setBorder(BorderFactory.createEmptyBorder(32, 18, 24, 18));
+        sidebar.setPreferredSize(new Dimension(238, 0));
+        JPanel brand = new JPanel(new BorderLayout(0, 8));
+        JLabel logo = AppTheme.type(new JLabel("PantryPal"), 31, true);
+        logo.setForeground(Color.WHITE);
+        brand.add(logo, BorderLayout.NORTH);
+        JLabel tagline = AppTheme.type(new JLabel("A little less waste."), 16, false);
+        tagline.setForeground(new Color(209, 228, 206));
+        brand.add(tagline, BorderLayout.SOUTH);
+        sidebar.add(brand, BorderLayout.NORTH);
+        JPanel menu = new JPanel();
+        menu.setLayout(new BoxLayout(menu, BoxLayout.Y_AXIS));
+        String[] names = { "Your pantry", "Recipes", "Create recipe", "Import recipes", "Broke Mode" };
+        for (int i = 0; i < names.length; i++)
+        {
+            final int destination = i;
+            JButton nav = new JButton(names[i]);
+            nav.setName("navigation" + i);
+            nav.putClientProperty("theme.button", "nav");
+            AppTheme.type(nav, 18, true);
+            nav.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+            nav.setMaximumSize(new Dimension(Integer.MAX_VALUE, 66));
+            nav.setAlignmentX(Component.LEFT_ALIGNMENT);
+            nav.addActionListener(event -> tabs.setSelectedIndex(destination));
+            navigation[i] = nav;
+            menu.add(nav);
+            menu.add(Box.createVerticalStrut(8));
+        }
+        JScrollPane menuScroll = AppTheme.pageScroll(menu);
+        menuScroll.putClientProperty("theme.scrollSurface", AppTheme.GREEN);
+        sidebar.add(menuScroll, BorderLayout.CENTER);
+        JPanel utility = new JPanel();
+        utility.setLayout(new BoxLayout(utility, BoxLayout.Y_AXIS));
+        JLabel sizeCaption = AppTheme.type(new JLabel("TEXT SIZE"), 14, true);
+        sizeCaption.setForeground(new Color(209, 228, 206));
+        utility.add(sizeCaption);
+        utility.add(Box.createVerticalStrut(8));
+        textSize.setAlignmentX(Component.LEFT_ALIGNMENT);
+        textSize.setMaximumSize(new Dimension(Integer.MAX_VALUE, 58));
+        textSize.getAccessibleContext().setAccessibleName("Text size");
+        utility.add(textSize);
+        utility.add(Box.createVerticalStrut(18));
+        utilityButton(utility, button("loadDemo", "Load demo data", () -> loadDemoData()));
+        if (controller.isPersistenceEnabled())
+        {
+            utilityButton(utility, button("saveNow", "Save now", () ->
+            {
+                controller.saveData();
+                feedback("All pantry and recipe changes are saved.", false);
+            }));
+            retryLoad = button("retryLoad", "Retry loading", () -> loadSavedData());
+            retryLoad.setVisible(false);
+            utilityButton(utility, retryLoad);
+        }
+        sidebar.add(utility, BorderLayout.SOUTH);
+        return sidebar;
+    }
+
+
+    private void utilityButton(JPanel parent, JButton button)
+    {
+        button.setAlignmentX(Component.LEFT_ALIGNMENT);
+        button.setMaximumSize(new Dimension(Integer.MAX_VALUE, 62));
+        AppTheme.type(button, 16, true);
+        parent.add(button);
+        parent.add(Box.createVerticalStrut(8));
+    }
+
+
+    private void updateNavigation()
+    {
+        int selected = tabs.getSelectedIndex();
+        String[] headings = { "Your pantry", "Find your next meal", "Create a recipe",
+            "Bring a recipe home", "A smarter grocery run" };
+        String[] descriptions = { "Know what you have. Make something good.",
+            "Explore saved recipes and see what you can cook right now.",
+            "Keep a favorite meal, one ingredient and one step at a time.",
+            "Search TheMealDB, review the ingredients, and save your favorites.",
+            "Review missing ingredients and build your Walmart estimate." };
+        if (selected < 0) { return; }
+        pageHeading.setText(headings[selected]);
+        pageDescription.setText(descriptions[selected]);
+        for (int i = 0; i < navigation.length; i++)
+        {
+            if (navigation[i] != null)
+            {
+                navigation[i].putClientProperty("theme.selected", i == selected);
+                navigation[i].getAccessibleContext().setAccessibleDescription(
+                    i == selected ? "Current section" : "Open " + tabs.getTitleAt(i));
+                navigation[i].repaint();
+            }
+        }
     }
 
 
@@ -402,7 +517,7 @@ public class PantryPalGUI extends JPanel
     private JPanel pantryPanel()
     {
         JPanel panel = section();
-        JPanel search = row(new JLabel("Name contains"), pantryQuery,
+        JPanel search = row(new JLabel("Search ingredients"), pantryQuery,
             button("pantrySearch", "Search", () ->
             {
                 refreshPantry();
@@ -418,10 +533,8 @@ public class PantryPalGUI extends JPanel
                     : "Showing all pantry entries.", false);
             }));
         panel.add(search, BorderLayout.NORTH);
-        panel.add(tableScroll(pantryTable), BorderLayout.CENTER);
+        JPanel inventory = AppTheme.card("Available ingredients", tableScroll(pantryTable));
         JPanel editor = form();
-        editor.setBorder(BorderFactory.createTitledBorder(
-            "Add an entry, or select a row to update it"));
         formRow(editor, 0, "Name", pantryName);
         formRow(editor, 1, "Quantity", pantryQuantity);
         formRow(editor, 2, "Unit", pantryUnit);
@@ -436,7 +549,7 @@ public class PantryPalGUI extends JPanel
                 clearPantryForm();
                 feedback("Ingredient added.", false);
             }),
-            button("pantryUpdate", "Update selected", () ->
+            button("pantryUpdate", "Save changes", () ->
             {
                 requirePantrySelection();
                 boolean updated = controller.updatePantryIngredient(
@@ -447,7 +560,7 @@ public class PantryPalGUI extends JPanel
                 feedback(updated ? "Ingredient updated."
                     : "Ingredient not found.", !updated);
             }),
-            button("pantryRemove", "Remove selected", () ->
+            button("pantryRemove", "Remove", () ->
             {
                 requirePantrySelection();
                 boolean removed = controller.removePantryIngredient(
@@ -464,7 +577,9 @@ public class PantryPalGUI extends JPanel
                 clearPantryForm();
                 feedback("Enter a new ingredient.", false);
             })));
-        panel.add(editor, BorderLayout.SOUTH);
+        JPanel editCard = AppTheme.card("Ingredient details", AppTheme.formPage(editor));
+        editCard.setPreferredSize(new Dimension(400, 330));
+        panel.add(AppTheme.adaptiveSplit(inventory, editCard, 0.60), BorderLayout.CENTER);
         pantryTable.getSelectionModel().addListSelectionListener(event ->
         {
             if (!refreshingPantry && !event.getValueIsAdjusting())
@@ -481,15 +596,17 @@ public class PantryPalGUI extends JPanel
                 }
             }
         });
-        return panel;
+        return AppTheme.screen(panel, 260);
     }
 
 
     private JPanel recipesPanel()
     {
         JPanel panel = section();
-        panel.add(row(new JLabel("Name contains"), recipeQuery,
-            new JLabel("Max cook minutes"), maxCookTime, effortFilter,
+        recipeQuery.setColumns(12);
+        maxCookTime.setColumns(4);
+        panel.add(row(new JLabel("Search recipes"), recipeQuery,
+            new JLabel("Max minutes"), maxCookTime, effortFilter,
             button("recipeSearch", "Apply", () ->
             {
                 refreshRecipes();
@@ -506,19 +623,26 @@ public class PantryPalGUI extends JPanel
                     : "Showing all saved recipes.", false);
             })), BorderLayout.NORTH);
         details.setEditable(false);
-        JPanel information = section();
-        information.setBorder(
-            BorderFactory.createTitledBorder("Recipe details"));
-        information.add(new JScrollPane(details), BorderLayout.NORTH);
+        details.setRows(7);
+        JPanel information = AppTheme.card("Instructions & details", new JScrollPane(details));
         JPanel comparison = section();
         comparison.setBorder(BorderFactory.createEmptyBorder());
+        AppTheme.type(comparisonSummary, 18, true);
         comparison.add(comparisonSummary, BorderLayout.NORTH);
+        comparisonTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        for (int column = 0; column < comparisonTable.getColumnCount(); column++)
+        { comparisonTable.getColumnModel().getColumn(column).setPreferredWidth(column == 0 ? 185 : column == 5 ? 155 : 115); }
         comparison.add(tableScroll(comparisonTable), BorderLayout.CENTER);
-        information.add(comparison, BorderLayout.CENTER);
-        JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
-            tableScroll(recipeTable), information);
-        split.setResizeWeight(0.25);
-        split.setDividerLocation(120);
+        JSplitPane recipeDetails = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
+            information, AppTheme.card("Pantry check", comparison));
+        recipeDetails.setResizeWeight(0.35);
+        recipeDetails.setDividerLocation(210);
+        recipeDetails.setMinimumSize(new Dimension(0, 0));
+        JPanel recipes = AppTheme.card("Your recipe collection", tableScroll(recipeTable));
+        recipeTable.getColumnModel().getColumn(0).setPreferredWidth(260);
+        recipeTable.getColumnModel().getColumn(1).setPreferredWidth(110);
+        recipeTable.getColumnModel().getColumn(2).setPreferredWidth(125);
+        JSplitPane split = AppTheme.adaptiveSplit(recipes, recipeDetails, 0.36);
         panel.add(split, BorderLayout.CENTER);
         panel.add(row(
             button("mealRoulette", "Meal Roulette", () ->
@@ -535,19 +659,19 @@ public class PantryPalGUI extends JPanel
                     + ". Searched all saved recipes; pantry unchanged.",
                     false);
             }),
-            button("recipeCompare", "Compare with pantry", () ->
+            button("recipeCompare", "Refresh availability", () ->
             {
                 requireRecipe();
                 refreshComparison();
                 feedback("Comparison updated using current pantry stock.",
                     false);
             }),
-            button("recipeEstimate", "Estimate Walmart cost", () ->
+            button("recipeEstimate", "Estimate cost", () ->
             {
                 brokePanel.showRecipe(requireRecipe());
                 tabs.setSelectedComponent(brokePanel);
             }),
-            button("recipeCook", "Cook & deduct ingredients", () ->
+            button("recipeCook", "Cook recipe", () ->
             {
                 boolean cooked = controller.cookRecipe(requireRecipe());
                 refreshPantry();
@@ -556,7 +680,7 @@ public class PantryPalGUI extends JPanel
                     : "Cannot cook: stock is missing or cannot be compared. "
                         + "Your pantry was not changed.", !cooked);
             }),
-            button("recipeRemove", "Remove selected recipe", () ->
+            button("recipeRemove", "Remove recipe", () ->
             {
                 boolean removed = controller.removeSavedRecipe(
                     requireRecipe().getId());
@@ -571,7 +695,7 @@ public class PantryPalGUI extends JPanel
                 perform(() -> refreshComparison());
             }
         });
-        return panel;
+        return AppTheme.screen(panel, 450);
     }
 
 
@@ -580,13 +704,10 @@ public class PantryPalGUI extends JPanel
         JPanel panel = section();
         JPanel metadata = form();
         formRow(metadata, 0, "Recipe name", recipeName);
-        formRow(metadata, 1, "Prep minutes (blank = unknown)", prepTime);
-        formRow(metadata, 2, "Cook minutes (blank = unknown)", cookTime);
+        formRow(metadata, 1, "Prep minutes (optional)", prepTime);
+        formRow(metadata, 2, "Cook minutes (optional)", cookTime);
         formRow(metadata, 3, "Effort", recipeEffort);
-        panel.add(metadata, BorderLayout.NORTH);
         JPanel requirements = section();
-        requirements.setBorder(BorderFactory.createTitledBorder(
-            "Ingredients - add at least one"));
         requirements.add(row(new JLabel("Name"), requirementName,
             new JLabel("Quantity"), requirementQuantity, requirementUnit,
             button("requirementAdd", "Add ingredient", () ->
@@ -616,10 +737,8 @@ public class PantryPalGUI extends JPanel
             })), BorderLayout.NORTH);
         requirements.add(tableScroll(requirementTable),
             BorderLayout.CENTER);
-        panel.add(requirements, BorderLayout.CENTER);
+        AppTheme.height(requirements, 330);
         JPanel steps = section();
-        steps.setBorder(BorderFactory.createTitledBorder(
-            "Instructions - one step per line"));
         steps.add(new JScrollPane(instructions), BorderLayout.CENTER);
         steps.add(row(button("recipeCreate", "Save recipe", () ->
         {
@@ -633,7 +752,11 @@ public class PantryPalGUI extends JPanel
             showRecipe(recipe);
             feedback("Recipe added to your collection.", false);
         })), BorderLayout.SOUTH);
-        panel.add(steps, BorderLayout.SOUTH);
+        AppTheme.height(steps, 240);
+        panel.add(AppTheme.pageScroll(AppTheme.formPage(
+            AppTheme.card("1. Recipe basics", metadata),
+            AppTheme.card("2. Ingredients", requirements),
+            AppTheme.card("3. Instructions · one step per line", steps))), BorderLayout.CENTER);
         return panel;
     }
 
@@ -719,15 +842,17 @@ public class PantryPalGUI extends JPanel
         int index = selectedRow(recipeTable);
         if (index < 0)
         {
-            details.setText("");
+            details.setText("Choose a recipe from your collection to see its instructions.");
             comparisonSummary.setText("Select a recipe to see availability.");
             return;
         }
         Recipe recipe = shownRecipes[index];
         details.setText(recipe.getName() + "\nPrep: "
-            + time(recipe.getPrepTimeMinutes()) + " min  |  Cook: "
-            + time(recipe.getCookTimeMinutes()) + " min  |  Effort: "
-            + recipe.getEffort() + "\n\n"
+            + duration(recipe.getPrepTimeMinutes()) + "   ·   Cook: "
+            + duration(recipe.getCookTimeMinutes()) + "   ·   Effort: "
+            + (recipe.getEffort() == Effort.UNKNOWN ? "Not specified"
+                : recipe.getEffort().name().substring(0, 1)
+                    + recipe.getEffort().name().substring(1).toLowerCase(Locale.ROOT)) + "\n\n"
             + String.join("\n", recipe.getInstructions())
             + (recipe.getSourceUrl().isBlank() ? ""
                 : "\n\nSource: " + recipe.getSourceUrl()));
@@ -735,6 +860,7 @@ public class PantryPalGUI extends JPanel
         RecipeMatchResult result = controller.compareRecipeWithPantry(recipe);
         comparisonSummary.setText(result.canCook() ? "Ready to cook."
             : "Not ready - check shortages and unknown quantities below.");
+        comparisonSummary.setForeground(result.canCook() ? AppTheme.GREEN : AppTheme.DANGER);
         for (IngredientMatch match : result.getIngredientMatches())
         {
             Ingredient required = match.getRequiredIngredient();
@@ -798,6 +924,9 @@ public class PantryPalGUI extends JPanel
 
     private void feedback(String message, boolean error)
     {
+        collectionSummary.setText(controller.getPantryIngredients().length + " pantry ingredients   ·   "
+            + controller.getSavedRecipes().length + " saved recipes   ·   "
+            + controller.getSavedDrafts().length + " import drafts");
         importPanel.refreshSavedCount();
         storageStatus.setText(!controller.isPersistenceEnabled()
             ? "Session-only mode: all data is lost when you close."
@@ -807,6 +936,7 @@ public class PantryPalGUI extends JPanel
                 : "Autosave is on. Pantry and recipes are saved locally.");
         status.setForeground(error ? new Color(151, 37, 30)
             : new Color(35, 83, 61));
+        status.setBackground(error ? new Color(252, 237, 230) : AppTheme.TINT);
         status.setText((error ? "Please try again: " : "") + message);
     }
 
@@ -846,6 +976,10 @@ public class PantryPalGUI extends JPanel
     {
         JButton button = new JButton(title);
         button.setName(name);
+        if (name.equals("pantryAdd") || name.equals("recipeCook") || name.equals("recipeCreate"))
+        { button.putClientProperty("theme.button", "primary"); }
+        if (name.equals("pantryRemove") || name.equals("recipeRemove"))
+        { button.putClientProperty("theme.button", "danger"); }
         button.setFocusPainted(false);
         button.setMargin(new Insets(7, 12, 7, 12));
         button.addActionListener(event -> perform(action));
@@ -899,6 +1033,10 @@ public class PantryPalGUI extends JPanel
     {
         return value == null ? "Unknown" : value.toString();
     }
+
+
+    private static String duration(Integer value)
+    { return value == null ? "Not specified" : value + " min"; }
 
 
     private static String unitText(Unit value)
@@ -1000,19 +1138,15 @@ public class PantryPalGUI extends JPanel
     private static JPanel section()
     {
         JPanel panel = new JPanel(new BorderLayout(8, 10));
-        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        panel.setBorder(BorderFactory.createEmptyBorder());
+        panel.setOpaque(false);
         return panel;
     }
 
 
     private static JPanel row(JComponent... components)
     {
-        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
-        for (JComponent component : components)
-        {
-            panel.add(component);
-        }
-        return panel;
+        return AppTheme.flow(components);
     }
 
 

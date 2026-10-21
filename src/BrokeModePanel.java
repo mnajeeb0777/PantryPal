@@ -1,6 +1,5 @@
 import java.awt.BorderLayout;
 import java.awt.Desktop;
-import java.awt.FlowLayout;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -23,9 +22,9 @@ import javax.swing.table.DefaultTableModel;
 public final class BrokeModePanel extends JPanel
 {
     private final PantryPalController controller;
-    private final JLabel heading = new JLabel("Select a saved recipe and click Estimate Walmart cost.");
-    private final JLabel message = new JLabel();
-    private final JLabel total = new JLabel("No estimate.");
+    private final JLabel heading = AppTheme.wrappingLabel("Select a saved recipe and click Estimate cost.");
+    private final JLabel message = AppTheme.wrappingLabel("");
+    private final JLabel total = AppTheme.wrappingLabel("No estimate.");
     private final JTable shortages = table("priceShortages", "Ingredient", "Missing", "Unit",
         "Selected product", "Packages", "Purchase cost", "Status");
     private final JTable products = table("priceProducts", "Product", "Package", "Offer price",
@@ -39,6 +38,9 @@ public final class BrokeModePanel extends JPanel
     private final JButton cancel = button("priceCancel", "Cancel searches", this::cancelSearch);
     private final JButton open = button("priceOpen", "Open Walmart listing", this::openListing);
     private final Timer validity = new Timer(1000, event -> refreshValidity());
+    private JPanel pricePage;
+    private JPanel estimateCard;
+    private boolean summaryPinned;
     private Recipe recipe;
     private long revision;
     private boolean stale = true;
@@ -71,33 +73,77 @@ public final class BrokeModePanel extends JPanel
         if (controller == null || !javax.swing.SwingUtilities.isEventDispatchThread())
         { throw new IllegalArgumentException("Create pricing UI on the Swing event thread with a controller."); }
         this.controller = controller;
-        setLayout(new BorderLayout(6, 6));
+        AppTheme.install();
+        setLayout(new BorderLayout(14, 18));
+        setOpaque(false);
         setName("brokeModePanel");
+        JPanel page = AppTheme.page();
+        pricePage = page;
         heading.setName("priceHeading"); message.setName("priceStatus"); total.setName("priceTotal");
-        JPanel top = new JPanel(new BorderLayout());
+        JPanel top = new JPanel(new BorderLayout(0, 8));
         top.add(heading, BorderLayout.NORTH);
-        top.add(new JLabel("Review food form before selecting. Skip unknown sizes. Up to 15 searches per run."), BorderLayout.CENTER);
-        JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JLabel guidance = AppTheme.type(AppTheme.wrappingLabel(
+            "Choose products that match the ingredient and package size. "
+            + "You can skip unresolved items. Each search batch includes up to 15 ingredients."), 17, false);
+        guidance.setForeground(AppTheme.MUTED);
+        top.add(guidance, BorderLayout.CENTER);
+        JPanel actions = AppTheme.flow();
         for (JButton b : new JButton[] {search, retry, reload, cancel}) { actions.add(b); }
         top.add(actions, BorderLayout.SOUTH);
-        add(top, BorderLayout.NORTH);
+        page.add(top, BorderLayout.NORTH);
         JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
-            scroll(shortages, "Missing recipe ingredients"), scroll(products, "Walmart product candidates"));
-        split.setResizeWeight(0.5); split.setDividerLocation(180);
-        add(split, BorderLayout.CENTER);
+            AppTheme.card("1. Your missing ingredients", scroll(shortages, "")),
+            AppTheme.card("2. Choose a Walmart product", scroll(products, "")));
+        split.setResizeWeight(0.40); split.setDividerLocation(220);
+        AppTheme.height(split, 400);
+        page.add(split, BorderLayout.CENTER);
         JPanel bottom = new JPanel(new BorderLayout(4, 4));
-        JPanel choices = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel choices = AppTheme.flow();
         choices.add(use); choices.add(skip); choices.add(open);
         bottom.add(choices, BorderLayout.NORTH);
-        JPanel labels = new JPanel(new java.awt.GridLayout(0, 1));
-        labels.add(total); labels.add(message);
-        labels.add(new JLabel("USD estimates exclude taxes, shipping and delivery fees. Stock is provider-reported."));
-        bottom.add(labels, BorderLayout.SOUTH); add(bottom, BorderLayout.SOUTH);
+        JPanel labels = new JPanel(new BorderLayout(0, 8));
+        AppTheme.type(total, 26, true);
+        total.setForeground(AppTheme.GREEN);
+        labels.add(total, BorderLayout.NORTH);
+        labels.add(message, BorderLayout.CENTER);
+        JLabel disclaimer = AppTheme.type(AppTheme.wrappingLabel(
+            "USD estimate · Tax, shipping and delivery excluded · Availability is provider-reported"), 16, false);
+        disclaimer.setForeground(AppTheme.MUTED);
+        labels.add(disclaimer, BorderLayout.SOUTH);
+        bottom.add(labels, BorderLayout.SOUTH);
+        estimateCard = AppTheme.card(null, bottom);
+        page.add(estimateCard, BorderLayout.SOUTH);
+        add(AppTheme.pageScroll(page), BorderLayout.CENTER);
         shortages.getSelectionModel().addListSelectionListener(event ->
         { if (!updating && !event.getValueIsAdjusting()) { showProducts(); updateButtons(); } });
         message.setText(controller.isPricingAvailable() ? "Ready when you select a recipe."
             : "Set SERPAPI_API_KEY in your environment or .env.local, then restart PantryPal.");
+        AppTheme.type(heading, 21, true);
+        search.putClientProperty("theme.button", "primary");
+        use.putClientProperty("theme.button", "primary");
+        AppTheme.apply(this, 1.0);
+        for (JTable table : new JTable[] { shortages, products })
+        {
+            table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+            for (int column=0; column<table.getColumnCount(); column++)
+            { table.getColumnModel().getColumn(column).setPreferredWidth(column == 0 || (table == shortages && column == 3) ? 240 : 155); }
+        }
         updateButtons();
+    }
+
+    /** Pin the estimate only when the window has room; otherwise it scrolls normally. */
+    @Override public void doLayout()
+    {
+        boolean pin = getFont() != null && getHeight() >= 650 * (getFont().getSize() / 18.0);
+        if (pricePage != null && estimateCard != null && pin != summaryPinned)
+        {
+            java.awt.Container parent = estimateCard.getParent();
+            if (parent != null) { parent.remove(estimateCard); }
+            if (pin) { add(estimateCard, BorderLayout.SOUTH); }
+            else { pricePage.add(estimateCard, BorderLayout.SOUTH); }
+            summaryPinned = pin;
+        }
+        super.doLayout();
     }
 
     @Override public void addNotify() { super.addNotify(); validity.start(); }
@@ -217,7 +263,9 @@ public final class BrokeModePanel extends JPanel
             : "Choose a product; confirm its food form.";
         if (update.result != null)
         { heading.setText("Walmart estimate for " + recipe.getName() + " — " + update.result.getLocation()
-            + " (store " + update.result.getStoreId() + ") — checked " + update.result.getCheckedAt()); }
+            + " (store " + update.result.getStoreId() + ") — checked "
+            + java.time.format.DateTimeFormatter.ofPattern("MMM d, h:mm a", Locale.US)
+                .withZone(java.time.ZoneId.systemDefault()).format(update.result.getCheckedAt())); }
     }
 
     /** Cancels in-flight work and ignores late responses; completed selections remain. */
@@ -355,7 +403,7 @@ public final class BrokeModePanel extends JPanel
     {
         JScrollPane scroll = new JScrollPane(table);
         scroll.setColumnHeaderView(table.getTableHeader());
-        scroll.setBorder(javax.swing.BorderFactory.createTitledBorder(title));
+        scroll.setBorder(javax.swing.BorderFactory.createEmptyBorder());
         return scroll;
     }
     private static String money(BigDecimal value) { return "$" + value.setScale(2, java.math.RoundingMode.HALF_UP); }
