@@ -33,6 +33,12 @@ final class RecipeHttpStub extends HttpClient
     IOException failure;
     /** Whether the request simulates cancellation. */
     boolean interrupt;
+    /** Optional price/account routing, preserving recipe-test behavior by default. */
+    boolean priceMode;
+    String accountBody = "{\"total_searches_left\":250}";
+    int calls;
+    int searchCalls;
+    boolean calledOnEdt;
 
     @Override
     @SuppressWarnings("unchecked")
@@ -40,13 +46,18 @@ final class RecipeHttpStub extends HttpClient
         HttpResponse.BodyHandler<T> handler) throws IOException, InterruptedException
     {
         lastRequest = request;
+        calls++;
+        calledOnEdt |= javax.swing.SwingUtilities.isEventDispatchThread();
+        boolean account = priceMode && request.uri().getPath().endsWith("account.json");
+        if (priceMode && !account) { searchCalls++; }
         if (failure != null) { throw failure; }
         if (interrupt) { throw new InterruptedException("Cancelled"); }
         // The importer exclusively uses BodyHandlers.ofString().
-        T content = (T)body;
+        T content = (T)(account ? accountBody : body);
+        int responseStatus = account ? 200 : status;
         return new HttpResponse<T>()
         {
-            @Override public int statusCode() { return status; }
+            @Override public int statusCode() { return responseStatus; }
             @Override public HttpRequest request() { return request; }
             @Override public Optional<HttpResponse<T>> previousResponse()
             { return Optional.empty(); }

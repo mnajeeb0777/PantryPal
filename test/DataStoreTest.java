@@ -154,7 +154,7 @@ public class DataStoreTest extends TestCase
     public void testCorruptFields() throws IOException
     {
         String[][] corruptions = {
-            { "version", "2" }, { "version", null },
+            { "version", "999" }, { "version", null },
             { "pantry.count", "-1" }, { "pantry.count", "2147483647" },
             { "pantry.0.id", "bad-id" }, { "pantry.0.name", "" },
             { "pantry.0.quantity", "NaN" }, { "pantry.0.quantity", "0" },
@@ -277,6 +277,69 @@ public class DataStoreTest extends TestCase
         }
     }
 
+
+    /**
+     * Old saves load without mutation and upgrade atomically on the next save.
+     * @throws IOException for unexpected file errors
+     */
+    public void testVersionOneCompatibilityAndUpgrade() throws IOException
+    {
+        store.save(sample());
+        Properties legacy = readProperties();
+        legacy.setProperty("version", "1");
+        legacy.remove("drafts.count");
+        writeProperties(legacy);
+        byte[] before = Files.readAllBytes(file);
+        PantryPalData loaded = store.load();
+        assertEquals(1, loaded.getSavedRecipes().length);
+        assertEquals(0, loaded.getSavedDrafts().length);
+        assertTrue(Arrays.equals(before, Files.readAllBytes(file)));
+        store.save(loaded);
+        assertEquals("2", readProperties().getProperty("version"));
+        assertEquals(1, store.load().getPantryIngredients().length);
+        assertEquals(1, store.load().getSavedRecipes().length);
+    }
+
+    /**
+     * Unfinished text and original source data survive saving and reopening.
+     * @throws IOException for unexpected file errors
+     */
+    public void testDraftRoundTripAndCorruptFields() throws IOException
+    {
+        RecipeImportDraft draft = new RecipeImportDraft("42", "Cr\u00e8me beans",
+            new String[] { "Beans", "Salt" }, new String[] { "1 tin", "to taste" },
+            "Heat.\nServe.", "https://example.org/?a=1&b=2").withReview(
+                new String[][] { { "Black beans", "200", "GRAM" },
+                    { "Salt", "  unsure?\n", "" } }, "later", "", Effort.MEDIUM);
+        PantryPalData snapshot = new PantryPalData(sample().getPantryIngredients(),
+            sample().getSavedRecipes(), new RecipeImportDraft[] { draft });
+        store.save(snapshot);
+        RecipeImportDraft reopened = new DataStore(file).load().getSavedDrafts()[0];
+        assertEquals(draft.getName(), reopened.getName());
+        assertEquals("Heat.\nServe.", reopened.getInstructions());
+        assertEquals("1 tin", reopened.getMeasurements()[0]);
+        assertEquals("Black beans", reopened.getReviewRows()[0][0]);
+        assertEquals("200", reopened.getReviewRows()[0][1]);
+        assertEquals("  unsure?\n", reopened.getReviewRows()[1][1]);
+        assertEquals("", reopened.getReviewRows()[1][2]);
+        assertEquals("later", reopened.getPrepText());
+        assertEquals(Effort.MEDIUM, reopened.getEffort());
+        String[][] corruptions = { { "drafts.count", "-1" },
+            { "drafts.0.id", "wrong" }, { "drafts.0.rows.count", "0" },
+            { "drafts.0.rows.0.unit", "TIN" }, { "drafts.0.rows.0.quantity", null },
+            { "drafts.0.effort", "BAD" }, { "drafts.0.instructions", null } };
+        for (String[] corruption : corruptions)
+        {
+            store.save(snapshot);
+            Properties fields = readProperties();
+            if (corruption[1] == null) { fields.remove(corruption[0]); }
+            else { fields.setProperty(corruption[0], corruption[1]); }
+            writeProperties(fields);
+            byte[] previous = Files.readAllBytes(file);
+            expectIOException(() -> store.load());
+            assertTrue(Arrays.equals(previous, Files.readAllBytes(file)));
+        }
+    }
 
     private PantryPalData sample()
     {

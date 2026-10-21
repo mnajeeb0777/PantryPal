@@ -186,6 +186,122 @@ public class RecipeImportPanelTest extends TestCase
         });
     }
 
+    /**
+     * Partial edits survive reopening offline and cannot cook until promoted.
+     * @throws Exception for unexpected UI or persistence errors
+     */
+    public void testSaveForLaterAndResumeOffline() throws Exception
+    {
+        search();
+        SwingUtilities.invokeAndWait(() ->
+        {
+            select();
+            table().setValueAt("White rice", 0, 0);
+            assertTrue(table().editCellAt(0, 2));
+            ((JTextField)table().getEditorComponent()).setText("1.75");
+            field("importPrep").setText("not sure yet");
+            click("externalSaveLater");
+            assertEquals(1, controller.getSavedDrafts().length);
+            assertEquals(0, controller.getSavedRecipes().length);
+            assertNull(controller.selectMealRouletteRecipe());
+            assertFalse(controller.hasUnsavedChanges());
+            assertTrue(status().contains("Saved for later"));
+        });
+        DataStore disk = new DataStore(directory.resolve("data.properties"));
+        PantryPalController reopened = new PantryPalController(disk,
+            new IngredientMatcher(), null, null);
+        reopened.loadData();
+        transport.lastRequest = null;
+        SwingUtilities.invokeAndWait(() ->
+        {
+            controller = reopened;
+            gui = new PantryPalGUI(reopened);
+            assertTrue(((JButton)find(gui, "externalSavedDrafts")).getText().contains("(1)"));
+            click("externalSavedDrafts");
+            assertEquals("Needs review", ((JTable)find(gui, "externalResults")).getValueAt(0, 2));
+            select();
+            assertEquals("White rice", table().getValueAt(0, 0));
+            assertEquals("1 1/2 cups", table().getValueAt(0, 1));
+            assertEquals("1.75", table().getValueAt(0, 2));
+            assertEquals("", table().getValueAt(1, 2));
+            assertEquals("not sure yet", field("importPrep").getText());
+            click("externalImport");
+            assertTrue(status().contains("Row 2"));
+            table().setValueAt("200", 1, 2);
+            table().setValueAt(Unit.GRAM, 1, 3);
+            field("importPrep").setText("");
+            click("externalImport");
+            assertEquals(1, controller.getSavedRecipes().length);
+            assertEquals(0, controller.getSavedDrafts().length);
+            assertTrue(((JButton)find(gui, "externalSavedDrafts")).getText().contains("(0)"));
+            assertNull(transport.lastRequest);
+        });
+        assertEquals(0, disk.load().getSavedDrafts().length);
+        assertEquals(1, disk.load().getSavedRecipes().length);
+    }
+
+    /**
+     * Saving repeatedly updates one draft, and searching again resumes its edits.
+     * @throws Exception for unexpected UI errors
+     */
+    public void testSaveForLaterUpdatesAndSearchResumesEdits() throws Exception
+    {
+        search();
+        SwingUtilities.invokeAndWait(() ->
+        {
+            select();
+            table().setValueAt("???", 1, 2);
+            click("externalSaveLater");
+            table().setValueAt("400", 1, 2);
+            table().setValueAt(Unit.GRAM, 1, 3);
+            click("externalSaveLater");
+            assertEquals(1, controller.getSavedDrafts().length);
+        });
+        search();
+        SwingUtilities.invokeAndWait(() ->
+        {
+            select();
+            assertEquals("400", table().getValueAt(1, 2));
+            assertEquals(Unit.GRAM, table().getValueAt(1, 3));
+        });
+    }
+
+    /**
+     * Failed draft saves retain progress, and deletion can also be retried.
+     * @throws Exception for unexpected UI or persistence errors
+     */
+    public void testSaveForLaterFailureRetryAndRemoval() throws Exception
+    {
+        search();
+        SwingUtilities.invokeAndWait(() ->
+        {
+            select();
+            failSave = true;
+            click("externalSaveLater");
+            assertTrue(status().contains("Could not save"));
+            assertTrue(controller.hasUnsavedChanges());
+            assertEquals(1, controller.getSavedDrafts().length);
+            failSave = false;
+            click("saveNow");
+            assertFalse(controller.hasUnsavedChanges());
+            click("externalSavedDrafts");
+            select();
+            failSave = true;
+            click("externalRemoveDraft");
+            assertTrue(status().contains("Could not save"));
+            assertTrue(controller.hasUnsavedChanges());
+            assertEquals(0, controller.getSavedDrafts().length);
+            failSave = false;
+            click("saveNow");
+            assertFalse(controller.hasUnsavedChanges());
+            click("externalSavedDrafts");
+            assertTrue(status().contains("No recipes saved"));
+            assertFalse(((JButton)find(gui, "externalSaveLater")).isEnabled());
+        });
+        assertEquals(0, new DataStore(directory.resolve("data.properties")).load()
+            .getSavedDrafts().length);
+    }
+
     private void search() throws Exception
     {
         SwingUtilities.invokeAndWait(() ->

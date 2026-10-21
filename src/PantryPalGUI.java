@@ -47,6 +47,8 @@ public class PantryPalGUI extends JPanel
     private boolean loadFailed;
     private JButton retryLoad;
     private final JTabbedPane tabs = new JTabbedPane();
+    private RecipeImportPanel importPanel;
+    private BrokeModePanel brokePanel;
     private final JTextField pantryQuery = field("pantryQuery");
     private final JTextField pantryName = field("pantryName");
     private final JTextField pantryQuantity = field("pantryQuantity");
@@ -138,7 +140,7 @@ public class PantryPalGUI extends JPanel
         tabs.addTab("Pantry", pantryPanel());
         tabs.addTab("Recipes", recipesPanel());
         tabs.addTab("Create recipe", createRecipePanel());
-        tabs.addTab("Import recipes", new RecipeImportPanel(controller, recipe ->
+        importPanel = new RecipeImportPanel(controller, recipe ->
             perform(() ->
             {
                 boolean added = controller.importRecipe(recipe);
@@ -149,7 +151,17 @@ public class PantryPalGUI extends JPanel
                 feedback(added ? "Recipe imported into your collection."
                     : "This recipe is already saved. Your existing recipe was kept.",
                     !added);
-            })));
+            }), this::feedback);
+        tabs.addTab("Import recipes", importPanel);
+        brokePanel = new BrokeModePanel(controller);
+        tabs.addTab("Broke Mode", brokePanel);
+        tabs.addChangeListener(event ->
+        {
+            boolean pricing = tabs.getSelectedComponent() == brokePanel;
+            controller.setBrokeModeEnabled(pricing);
+            if (!pricing) { brokePanel.cancelSearch(); }
+            else { brokePanel.refreshValidity(); }
+        });
         add(tabs, BorderLayout.CENTER);
         status.setEditable(false);
         status.setBackground(new Color(233, 239, 229));
@@ -180,10 +192,11 @@ public class PantryPalGUI extends JPanel
             ? Path.of(System.getProperty("user.home"), ".pantrypal",
                 "data.properties") : Path.of(configured);
         DataStore store = new DataStore(savePath);
+        PriceFinder pricing = PriceFinder.configuredClient();
         SwingUtilities.invokeLater(() ->
         {
             PantryPalController session = new PantryPalController(store,
-                new IngredientMatcher(), RecipeImporter.educationalClient(), null);
+                new IngredientMatcher(), RecipeImporter.educationalClient(), pricing);
             JFrame window = new JFrame("PantryPal");
             window.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
             PantryPalGUI view = new PantryPalGUI(session);
@@ -231,6 +244,8 @@ public class PantryPalGUI extends JPanel
 
     private void closeWindow(JFrame window)
     {
+        brokePanel.cancelSearch();
+        importPanel.cancelSearch();
         if (!controller.hasUnsavedChanges())
         {
             window.dispose();
@@ -486,6 +501,11 @@ public class PantryPalGUI extends JPanel
                 feedback("Comparison updated using current pantry stock.",
                     false);
             }),
+            button("recipeEstimate", "Estimate Walmart cost", () ->
+            {
+                brokePanel.showRecipe(requireRecipe());
+                tabs.setSelectedComponent(brokePanel);
+            }),
             button("recipeCook", "Cook & deduct ingredients", () ->
             {
                 boolean cooked = controller.cookRecipe(requireRecipe());
@@ -737,6 +757,7 @@ public class PantryPalGUI extends JPanel
 
     private void feedback(String message, boolean error)
     {
+        importPanel.refreshSavedCount();
         storageStatus.setText(!controller.isPersistenceEnabled()
             ? "Session-only mode: all data is lost when you close."
             : loadFailed ? "Load failed: changes are blocked to protect your save."

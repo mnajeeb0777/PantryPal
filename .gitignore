@@ -4,6 +4,10 @@
 /DELIVERABLE_3_AUDIT.md
 /IMPLEMENTATION_NOTES.md
 
+# Local API credentials
+.env
+.env.local
+
 # Java build outputs
 *.class
 target/

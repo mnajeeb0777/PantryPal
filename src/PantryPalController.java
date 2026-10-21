@@ -15,6 +15,7 @@ public class PantryPalController
 {
     private Pantry pantry;
     private RecipeBook recipeBook;
+    private LinkedChain<RecipeImportDraft> savedDrafts = new LinkedChain<RecipeImportDraft>();
     private IngredientMatcher ingredientMatcher;
     private RecipeMatcher recipeMatcher;
     private RecipeImporter recipeImporter;
@@ -23,6 +24,7 @@ public class PantryPalController
     private boolean brokeModeEnabled;
     private boolean unsavedChanges;
     private boolean loadRequired;
+    private long dataRevision;
 
 
     /**
@@ -77,8 +79,12 @@ public class PantryPalController
         PantryPalData data = dataStore.load();
         Pantry loadedPantry = new Pantry(data.getPantryIngredients());
         RecipeBook loadedRecipes = new RecipeBook(data.getSavedRecipes());
+        LinkedChain<RecipeImportDraft> loadedDrafts = new LinkedChain<RecipeImportDraft>();
+        for (RecipeImportDraft draft : data.getSavedDrafts()) { loadedDrafts.addToEnd(draft); }
         pantry = loadedPantry;
         recipeBook = loadedRecipes;
+        savedDrafts = loadedDrafts;
+        dataRevision++;
         unsavedChanges = false;
         loadRequired = false;
     }
@@ -94,7 +100,7 @@ public class PantryPalController
         requireDataStore();
         requireLoaded();
         dataStore.save(new PantryPalData(
-            pantry.getAllIngredients(), recipeBook.getAllRecipes()));
+            pantry.getAllIngredients(), recipeBook.getAllRecipes(), getSavedDrafts()));
         unsavedChanges = false;
     }
 
@@ -333,6 +339,81 @@ public class PantryPalController
     }
 
 
+    /** @return independent array of immutable imports saved for later */
+    public RecipeImportDraft[] getSavedDrafts()
+    {
+        return savedDrafts.toArray(new RecipeImportDraft[savedDrafts.size()]);
+    }
+
+    /**
+     * Saves unfinished review progress separately from validated recipes.
+     * @param draft original recipe data and current edits
+     * @throws IOException if autosave fails; progress remains in memory
+     */
+    public void saveRecipeDraft(RecipeImportDraft draft) throws IOException
+    {
+        requireLoaded();
+        if (draft == null) { throw new IllegalArgumentException("Draft is required."); }
+        for (Recipe recipe : recipeBook.getAllRecipes())
+        {
+            if (recipe.getExternalRecipeId().equals("themealdb:" + draft.getExternalId())
+                && recipe.getSourceUrl().equals(draft.getProviderUrl()))
+            {
+                throw new IllegalStateException("This recipe is already in your collection.");
+            }
+        }
+        LinkedChain<RecipeImportDraft> updated = new LinkedChain<RecipeImportDraft>();
+        boolean replaced = false;
+        for (RecipeImportDraft existing : getSavedDrafts())
+        {
+            boolean same = existing.getExternalId().equals(draft.getExternalId());
+            updated.addToEnd(same ? draft : existing);
+            replaced |= same;
+        }
+        if (!replaced) { updated.addToEnd(draft); }
+        savedDrafts = updated;
+        changed();
+    }
+
+    /**
+     * Removes a saved unfinished import without changing the pantry.
+     * @param externalId TheMealDB ID
+     * @return whether a draft was removed
+     * @throws IOException if autosave fails; removal remains in memory
+     */
+    public boolean removeRecipeDraft(String externalId) throws IOException
+    {
+        requireLoaded();
+        if (externalId == null || externalId.isBlank())
+        {
+            throw new IllegalArgumentException("A draft ID is required.");
+        }
+        boolean removed = removeDraftInMemory(externalId);
+        if (removed) { changed(); }
+        return removed;
+    }
+
+    private boolean removeDraftInMemory(String externalId)
+    {
+        for (RecipeImportDraft draft : getSavedDrafts())
+        {
+            if (draft.getExternalId().equals(externalId)) { return savedDrafts.remove(draft); }
+        }
+        return false;
+    }
+
+    private void finishDraft(Recipe recipe)
+    {
+        if (recipe.getExternalRecipeId().startsWith("themealdb:"))
+        {
+            String id = recipe.getExternalRecipeId().substring("themealdb:".length());
+            if (recipe.getSourceUrl().equals("https://www.themealdb.com/meal/" + id))
+            {
+                removeDraftInMemory(id);
+            }
+        }
+    }
+
     /**
      * Stores a snapshot unless its local or external source identity is present.
      * @param recipe recipe snapshot to process
@@ -359,6 +440,7 @@ public class PantryPalController
         boolean added = recipeBook.addRecipe(recipe);
         if (added)
         {
+            finishDraft(recipe);
             changed();
         }
         return added;
@@ -445,19 +527,8 @@ public class PantryPalController
     }
 
 
-    /**
-     * Delegates only when Broke Mode and a price service are available.
-     * @param ingredient ingredient requirement
-     * @param zipCode search postal code
-     * @param radiusMiles search radius in miles
-     * @return offers returned by the configured service
-     * @throws IOException as defined by the class reference error contract
-     * @throws InterruptedException if an external request is interrupted
-     */
-    public StoreOffer[] findNearbyOffers(
-        Ingredient ingredient,
-        String zipCode,
-        double radiusMiles)
+    /** Searches the configured Walmart reference store only when Broke Mode is enabled. */
+    public PriceFinder.SearchResult findOffers(Ingredient ingredient)
         throws IOException, InterruptedException
     {
         if (!brokeModeEnabled)
@@ -465,7 +536,40 @@ public class PantryPalController
             throw new IllegalStateException("Broke Mode must be enabled.");
         }
         requirePriceFinder();
-        return priceFinder.findNearbyOffers(ingredient, zipCode, radiusMiles);
+        return priceFinder.findOffers(ingredient);
+    }
+
+    /** @return whether optional Walmart pricing is configured */
+    public boolean isPricingAvailable() { return priceFinder != null; }
+
+    /** @return configured store ID; construction and this lookup do not use quota */
+    public String getReferenceStore() { requirePriceFinder(); return priceFinder.getReferenceStore(); }
+
+    /** @return whether cached search data can still be used */
+    public boolean isPriceSearchCurrent(PriceFinder.SearchResult result)
+    { return priceFinder != null && priceFinder.isCurrent(result); }
+
+    /** @return monotonic session revision for invalidating estimate snapshots */
+    public long getDataRevision() { return dataRevision; }
+
+    /** Combines equivalent known shortages before whole-package rounding. */
+    public Ingredient[] getPricingShortages(Recipe recipe)
+    {
+        java.util.List<Ingredient> result = new java.util.ArrayList<Ingredient>();
+        for (Ingredient missing : compareRecipeWithPantry(recipe).getMissingIngredients())
+        {
+            Ingredient combined = null;
+            for (Ingredient previous : result)
+            {
+                if (ingredientMatcher.namesMatch(previous.getName(), missing.getName())
+                    && ingredientMatcher.areUnitsCompatible(previous.getUnit(), missing.getUnit()))
+                { combined = previous; break; }
+            }
+            if (combined == null) { result.add(missing); }
+            else { combined.setQuantity(combined.getQuantity()
+                + ingredientMatcher.convertQuantity(missing.getQuantity(), missing.getUnit(), combined.getUnit())); }
+        }
+        return result.toArray(new Ingredient[0]);
     }
 
 
@@ -520,6 +624,7 @@ public class PantryPalController
     private void changed()
         throws IOException
     {
+        dataRevision++;
         unsavedChanges = true;
         if (dataStore != null)
         {
@@ -558,7 +663,7 @@ public class PantryPalController
         if (priceFinder == null)
         {
             throw new IllegalStateException(
-                "Price lookup is unavailable in this prototype.");
+                "Walmart pricing is not configured. Set SERPAPI_API_KEY in the environment or .env.local.");
         }
     }
 }

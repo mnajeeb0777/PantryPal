@@ -34,6 +34,7 @@ public class PantryPalGUITest extends TestCase
     private Path directory;
     private Path saveFile;
     private String previousDataFile;
+    private String previousPricingDisabled;
     private JFrame desktopWindow;
 
 
@@ -47,6 +48,8 @@ public class PantryPalGUITest extends TestCase
     {
         directory = TestFixtures.temporaryDirectory();
         saveFile = directory.resolve("data.properties");
+        previousPricingDisabled = System.getProperty("pantrypal.pricingDisabled");
+        System.setProperty("pantrypal.pricingDisabled", "true");
         previousDataFile = System.getProperty("pantrypal.dataFile");
         System.setProperty("pantrypal.dataFile", saveFile.toString());
         controller = new PantryPalController();
@@ -81,6 +84,8 @@ public class PantryPalGUITest extends TestCase
             {
                 System.setProperty("pantrypal.dataFile", previousDataFile);
             }
+            if (previousPricingDisabled == null) { System.clearProperty("pantrypal.pricingDisabled"); }
+            else { System.setProperty("pantrypal.pricingDisabled", previousPricingDisabled); }
             TestFixtures.deleteDirectory(directory);
         }
     }

@@ -55,7 +55,7 @@ public class DataStore
             throw new IllegalArgumentException("Save data is required.");
         }
         Properties values = new Properties();
-        values.setProperty("version", "1");
+        values.setProperty("version", "2");
         putIngredients(values, "pantry", data.getPantryIngredients());
         Recipe[] recipes = data.getSavedRecipes();
         values.setProperty("recipes.count", Integer.toString(recipes.length));
@@ -83,6 +83,7 @@ public class DataStore
                 values.setProperty(prefix + "steps." + j, steps[j]);
             }
         }
+        putDrafts(values, data.getSavedDrafts());
         Files.createDirectories(filePath.getParent());
         Path temporary = Files.createTempFile(filePath.getParent(),
             "pantrypal-", ".tmp");
@@ -90,7 +91,7 @@ public class DataStore
         {
             try (OutputStream output = Files.newOutputStream(temporary))
             {
-                values.store(output, "PantryPal save - format version 1");
+                values.store(output, "PantryPal save - format version 2");
             }
             Files.move(temporary, filePath, StandardCopyOption.ATOMIC_MOVE,
                 StandardCopyOption.REPLACE_EXISTING);
@@ -135,7 +136,8 @@ public class DataStore
         }
         try
         {
-            if (!"1".equals(take(values, "version")))
+            String version = take(values, "version");
+            if (!"1".equals(version) && !"2".equals(version))
             {
                 throw new IllegalArgumentException("Unsupported save version.");
             }
@@ -162,11 +164,13 @@ public class DataStore
                 recipes[i] = new Recipe(id, name, ingredients, steps, prep,
                     cook, effort, source, external);
             }
+            RecipeImportDraft[] drafts = "2".equals(version)
+                ? readDrafts(values) : new RecipeImportDraft[0];
             if (!values.isEmpty())
             {
                 throw new IllegalArgumentException("Unexpected save fields.");
             }
-            return new PantryPalData(pantry, recipes);
+            return new PantryPalData(pantry, recipes, drafts);
         }
         catch (IllegalArgumentException exception)
         {
@@ -215,6 +219,68 @@ public class DataStore
         throw new IOException("The save location is unavailable.");
     }
 
+
+    private static void putDrafts(Properties values, RecipeImportDraft[] drafts)
+    {
+        values.setProperty("drafts.count", Integer.toString(drafts.length));
+        for (int i = 0; i < drafts.length; i++)
+        {
+            String prefix = "drafts." + i + ".";
+            RecipeImportDraft draft = drafts[i];
+            values.setProperty(prefix + "id", draft.getExternalId());
+            values.setProperty(prefix + "name", draft.getName());
+            values.setProperty(prefix + "instructions", draft.getInstructions());
+            values.setProperty(prefix + "source", draft.getOriginalSource());
+            values.setProperty(prefix + "prepText", draft.getPrepText());
+            values.setProperty(prefix + "cookText", draft.getCookText());
+            values.setProperty(prefix + "effort", draft.getEffort().name());
+            String[] names = draft.getIngredientNames();
+            String[] measures = draft.getMeasurements();
+            String[][] review = draft.getReviewRows();
+            values.setProperty(prefix + "rows.count", Integer.toString(names.length));
+            for (int j = 0; j < names.length; j++)
+            {
+                String row = prefix + "rows." + j + ".";
+                values.setProperty(row + "originalName", names[j]);
+                values.setProperty(row + "measurement", measures[j]);
+                values.setProperty(row + "name", review[j][0]);
+                values.setProperty(row + "quantity", review[j][1]);
+                values.setProperty(row + "unit", review[j][2]);
+            }
+        }
+    }
+
+    private static RecipeImportDraft[] readDrafts(Properties values)
+    {
+        RecipeImportDraft[] drafts = new RecipeImportDraft[count(values, "drafts.count")];
+        for (int i = 0; i < drafts.length; i++)
+        {
+            String prefix = "drafts." + i + ".";
+            String id = take(values, prefix + "id");
+            String name = take(values, prefix + "name");
+            String instructions = take(values, prefix + "instructions");
+            String source = take(values, prefix + "source");
+            String prep = take(values, prefix + "prepText");
+            String cook = take(values, prefix + "cookText");
+            Effort effort = Effort.valueOf(take(values, prefix + "effort"));
+            int length = count(values, prefix + "rows.count");
+            String[] names = new String[length];
+            String[] measures = new String[length];
+            String[][] review = new String[length][3];
+            for (int j = 0; j < length; j++)
+            {
+                String row = prefix + "rows." + j + ".";
+                names[j] = take(values, row + "originalName");
+                measures[j] = take(values, row + "measurement");
+                review[j][0] = take(values, row + "name");
+                review[j][1] = take(values, row + "quantity");
+                review[j][2] = take(values, row + "unit");
+            }
+            drafts[i] = new RecipeImportDraft(id, name, names, measures, instructions, source)
+                .withReview(review, prep, cook, effort);
+        }
+        return drafts;
+    }
 
     private static void putIngredients(Properties values, String prefix,
         Ingredient[] ingredients)

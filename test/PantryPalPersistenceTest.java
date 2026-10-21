@@ -229,6 +229,95 @@ public class PantryPalPersistenceTest extends TestCase
     }
 
 
+    /**
+     * Drafts persist independently and become real recipes only after review.
+     * @throws IOException for unexpected persistence errors
+     */
+    public void testSavedDraftResumePromoteAndRemove() throws IOException
+    {
+        RecipeImportDraft draft = new RecipeImportDraft("42", "Bean soup",
+            new String[] { "Beans" }, new String[] { "1 tin" }, "Heat.", "");
+        controller.addPantryIngredient("Beans", 1000, Unit.GRAM);
+        controller.saveRecipeDraft(draft);
+        assertEquals(0, controller.getSavedRecipes().length);
+        assertNull(controller.selectMealRouletteRecipe());
+        assertEquals(1000.0, controller.getPantryIngredients()[0].getQuantity(), 0.0);
+        PantryPalController reopened = controller(new DataStore(file));
+        reopened.loadData();
+        assertEquals(1, reopened.getSavedDrafts().length);
+        RecipeImportDraft ready = reopened.getSavedDrafts()[0].withReview(
+            new String[][] { { "Beans", "200", "GRAM" } }, "", "", Effort.UNKNOWN);
+        reopened.saveRecipeDraft(ready);
+        assertEquals(1, reopened.getSavedDrafts().length);
+        assertEquals("200", store.load().getSavedDrafts()[0].getReviewRows()[0][1]);
+        assertTrue(reopened.importRecipe(ready.toRecipe()));
+        assertEquals(0, reopened.getSavedDrafts().length);
+        assertEquals(0, store.load().getSavedDrafts().length);
+        assertEquals(1, store.load().getSavedRecipes().length);
+        assertTrue(reopened.cookRecipe(reopened.getSavedRecipes()[0]));
+        assertEquals(800.0, reopened.getPantryIngredients()[0].getQuantity(), 0.0);
+        assertTrue(reopened.removeSavedRecipe(reopened.getSavedRecipes()[0].getId()));
+        reopened.saveRecipeDraft(draft);
+        assertTrue(reopened.removeRecipeDraft("42"));
+        assertFalse(reopened.removeRecipeDraft("42"));
+        assertEquals(0, store.load().getSavedDrafts().length);
+    }
+
+    /**
+     * Failed autosave retains both draft progress and completed promotion in memory.
+     * @throws IOException for unexpected setup errors
+     */
+    public void testDraftSaveFailureAndPromotionRetry() throws IOException
+    {
+        final boolean[] failure = { true };
+        DataStore flaky = new DataStore(file)
+        {
+            @Override
+            public void save(PantryPalData snapshot) throws IOException
+            {
+                if (failure[0]) { throw new IOException("Test failure"); }
+                super.save(snapshot);
+            }
+        };
+        PantryPalController session = controller(flaky);
+        RecipeImportDraft draft = new RecipeImportDraft("42", "Beans",
+            new String[] { "Beans" }, new String[] { "1 tin" }, "", "");
+        try { session.saveRecipeDraft(draft); fail("Expected save failure"); }
+        catch (IOException expected) { assertTrue(session.hasUnsavedChanges()); }
+        assertEquals(1, session.getSavedDrafts().length);
+        failure[0] = false;
+        session.saveData();
+        assertEquals(1, store.load().getSavedDrafts().length);
+        failure[0] = true;
+        Recipe ready = draft.withReview(new String[][] { { "Beans", "200", "GRAM" } },
+            "", "", Effort.UNKNOWN).toRecipe();
+        try { session.importRecipe(ready); fail("Expected save failure"); }
+        catch (IOException expected) { assertTrue(session.hasUnsavedChanges()); }
+        assertEquals(0, session.getSavedDrafts().length);
+        assertEquals(1, session.getSavedRecipes().length);
+        assertEquals(1, store.load().getSavedDrafts().length);
+        failure[0] = false;
+        session.saveData();
+        assertEquals(0, store.load().getSavedDrafts().length);
+        assertEquals(1, store.load().getSavedRecipes().length);
+    }
+
+    /**
+     * Unreadable existing saves block draft writes and protect all collections.
+     * @throws IOException for unexpected file errors
+     */
+    public void testDraftLoadGuard() throws IOException
+    {
+        RecipeImportDraft draft = new RecipeImportDraft("42", "Beans",
+            new String[] { "Beans" }, new String[] { "1 tin" }, "", "");
+        Files.writeString(file, "broken save");
+        PantryPalController blocked = controller(new DataStore(file));
+        try { blocked.saveRecipeDraft(draft); fail("Expected load guard"); }
+        catch (IllegalStateException expected) { assertEquals(0, blocked.getSavedDrafts().length); }
+        try { blocked.removeRecipeDraft("42"); fail("Expected load guard"); }
+        catch (IllegalStateException expected) { assertEquals("broken save", Files.readString(file)); }
+    }
+
     private PantryPalController controller(DataStore dataStore)
     {
         return new PantryPalController(dataStore, new IngredientMatcher(),

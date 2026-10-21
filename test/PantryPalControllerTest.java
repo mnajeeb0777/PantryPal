@@ -260,10 +260,10 @@ public class PantryPalControllerTest extends TestCase
         PantryPalController controller = new PantryPalController();
         Ingredient ingredient = TestFixtures.ingredient(1, "Rice", 1, Unit.CUP);
         unavailable(() -> controller.searchExternalRecipes("Rice"));
-        unavailable(() -> controller.findNearbyOffers(ingredient, "24060", 5));
+        unavailable(() -> controller.findOffers(ingredient));
         controller.setBrokeModeEnabled(true);
         assertTrue(controller.isBrokeModeEnabled());
-        unavailable(() -> controller.findNearbyOffers(ingredient, "24060", 5));
+        unavailable(() -> controller.findOffers(ingredient));
         unavailable(() -> controller.findCheapestOffer(
             ingredient, new StoreOffer[0]));
         unavailable(() -> controller.calculateRequiredPackages(

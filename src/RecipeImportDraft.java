@@ -20,6 +20,10 @@ public final class RecipeImportDraft
     private final String[] measurements;
     private final String instructions;
     private final String originalSource;
+    private final String[][] reviewRows;
+    private final String prepText;
+    private final String cookText;
+    private final Effort effort;
 
     /**
      * Preserves raw text, including missing or unrecognized measurements.
@@ -34,11 +38,21 @@ public final class RecipeImportDraft
         String[] ingredientNames, String[] measurements, String instructions,
         String originalSource)
     {
+        this(externalId, name, ingredientNames, measurements, instructions,
+            originalSource, null, "", "", Effort.UNKNOWN);
+    }
+
+    private RecipeImportDraft(String externalId, String name,
+        String[] ingredientNames, String[] measurements, String instructions,
+        String originalSource, String[][] reviewRows, String prepText,
+        String cookText, Effort effort)
+    {
         if (externalId == null || !externalId.matches("[0-9]+")
             || name == null || name.isBlank() || ingredientNames == null
             || measurements == null || ingredientNames.length == 0
             || ingredientNames.length != measurements.length
-            || instructions == null || originalSource == null)
+            || instructions == null || originalSource == null
+            || prepText == null || cookText == null || effort == null)
         {
             throw new IllegalArgumentException("Incomplete import draft.");
         }
@@ -55,6 +69,113 @@ public final class RecipeImportDraft
         this.measurements = measurements.clone();
         this.instructions = instructions;
         this.originalSource = originalSource;
+        this.prepText = prepText;
+        this.cookText = cookText;
+        this.effort = effort;
+        if (reviewRows == null)
+        {
+            this.reviewRows = new String[ingredientNames.length][3];
+            for (int i = 0; i < ingredientNames.length; i++)
+            {
+                Ingredient suggestion = parseMeasurement(ingredientNames[i], measurements[i]);
+                this.reviewRows[i] = new String[] { ingredientNames[i],
+                    suggestion == null ? "" : Double.toString(suggestion.getQuantity()),
+                    suggestion == null ? "" : suggestion.getUnit().name() };
+            }
+        }
+        else
+        {
+            if (reviewRows.length != ingredientNames.length)
+            {
+                throw new IllegalArgumentException("Draft ingredient rows must be preserved.");
+            }
+            this.reviewRows = copyRows(reviewRows);
+        }
+    }
+
+    /** @return independent rows containing reviewed name, quantity text, and unit */
+    public String[][] getReviewRows() { return copyRows(reviewRows); }
+    /** @return preparation-time text, possibly blank or unfinished */
+    public String getPrepText() { return prepText; }
+    /** @return cooking-time text, possibly blank or unfinished */
+    public String getCookText() { return cookText; }
+    /** @return effort selected during review */
+    public Effort getEffort() { return effort; }
+
+    /**
+     * Captures unfinished edits without requiring valid ingredient quantities.
+     * @param rows reviewed name, quantity text, and unit name (or blank), per row
+     * @param prep unfinished preparation-time text
+     * @param cook unfinished cooking-time text
+     * @param selectedEffort effort selected during review
+     * @return independent draft preserving original data and partial edits
+     */
+    public RecipeImportDraft withReview(String[][] rows, String prep,
+        String cook, Effort selectedEffort)
+    {
+        if (rows == null)
+        {
+            throw new IllegalArgumentException("Review rows are required.");
+        }
+        return new RecipeImportDraft(externalId, name, ingredientNames,
+            measurements, instructions, originalSource, rows, prep, cook, selectedEffort);
+    }
+
+    /**
+     * Validates the saved review and promotes it to a cookable-model recipe.
+     * @return validated recipe; drafts themselves cannot be cooked
+     * @throws IllegalArgumentException if any requirement remains unresolved
+     */
+    public Recipe toRecipe()
+    {
+        Ingredient[] ingredients = new Ingredient[reviewRows.length];
+        for (int i = 0; i < ingredients.length; i++)
+        {
+            try
+            {
+                ingredients[i] = new Ingredient(UUID.randomUUID().toString(),
+                    reviewRows[i][0].strip(), Double.parseDouble(reviewRows[i][1].strip()),
+                    Unit.valueOf(reviewRows[i][2]));
+            }
+            catch (IllegalArgumentException exception)
+            {
+                throw new IllegalArgumentException("Row " + (i + 1)
+                    + ": enter a name, positive quantity, and unit, or Save for later.", exception);
+            }
+        }
+        return toRecipe(ingredients, minutes(prepText), minutes(cookText), effort);
+    }
+
+    private static String[][] copyRows(String[][] rows)
+    {
+        String[][] copy = new String[rows.length][];
+        for (int i = 0; i < rows.length; i++)
+        {
+            if (rows[i] == null || rows[i].length != 3
+                || rows[i][0] == null || rows[i][1] == null || rows[i][2] == null)
+            {
+                throw new IllegalArgumentException("Invalid draft review row.");
+            }
+            if (!rows[i][2].isEmpty()) { Unit.valueOf(rows[i][2]); }
+            copy[i] = rows[i].clone();
+        }
+        return copy;
+    }
+
+    private static Integer minutes(String text)
+    {
+        if (text.isBlank()) { return null; }
+        try
+        {
+            int value = Integer.parseInt(text.strip());
+            if (value < 0) { throw new NumberFormatException(); }
+            return value;
+        }
+        catch (NumberFormatException exception)
+        {
+            throw new IllegalArgumentException(
+                "Times must be nonnegative whole minutes or blank.", exception);
+        }
     }
 
     /** @return TheMealDB ID */
@@ -80,11 +201,11 @@ public final class RecipeImportDraft
      * @param ingredients reviewed rows, in original order
      * @param prep preparation minutes or null
      * @param cook cooking minutes or null
-     * @param effort selected effort, possibly UNKNOWN
+     * @param selectedEffort selected effort, possibly UNKNOWN
      * @return recipe with stable, namespaced identity and source attribution
      */
     public Recipe toRecipe(Ingredient[] ingredients, Integer prep,
-        Integer cook, Effort effort)
+        Integer cook, Effort selectedEffort)
     {
         if (ingredients == null || ingredients.length != ingredientNames.length)
         {
@@ -100,7 +221,7 @@ public final class RecipeImportDraft
             : new String[] { instructions, attribution };
         return new Recipe(UUID.nameUUIDFromBytes(identity.getBytes(
             StandardCharsets.UTF_8)).toString(), name, ingredients, steps,
-            prep, cook, effort, getProviderUrl(), identity);
+            prep, cook, selectedEffort, getProviderUrl(), identity);
     }
 
     /**

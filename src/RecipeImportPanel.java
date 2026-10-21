@@ -1,10 +1,10 @@
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.io.IOException;
-import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 import javax.swing.DefaultCellEditor;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
@@ -28,6 +28,10 @@ public class RecipeImportPanel extends JPanel
 {
     private final PantryPalController controller;
     private final Consumer<Recipe> importRecipe;
+    private final BiConsumer<String, Boolean> feedback;
+    private final JButton saveLater = new JButton("Save for later");
+    private final JButton savedLater = new JButton("Saved for later (0)");
+    private final JButton removeDraft = new JButton("Remove saved draft");
     private final JTextField query = new JTextField(22);
     private final JButton search = new JButton("Search TheMealDB");
     private final JButton cancel = new JButton("Cancel search");
@@ -37,7 +41,7 @@ public class RecipeImportPanel extends JPanel
     private final JTextField cook = new JTextField(4);
     private final JComboBox<Effort> effort = new JComboBox<Effort>(Effort.values());
     private final DefaultTableModel resultsModel = new DefaultTableModel(
-        new String[] { "Recipe", "TheMealDB ID" }, 0)
+        new String[] { "Recipe", "TheMealDB ID", "Status" }, 0)
     {
         @Override
         public boolean isCellEditable(int row, int column) { return false; }
@@ -59,17 +63,22 @@ public class RecipeImportPanel extends JPanel
      * Creates controls on the Swing EDT; the callback owns saving and feedback.
      * @param controller application services
      * @param importRecipe callback for a completely validated recipe
+     * @param feedback callback updating application save status
      */
     public RecipeImportPanel(PantryPalController controller,
-        Consumer<Recipe> importRecipe)
+        Consumer<Recipe> importRecipe, BiConsumer<String, Boolean> feedback)
     {
         this.controller = controller;
         this.importRecipe = importRecipe;
+        this.feedback = feedback;
         setLayout(new BorderLayout(8, 8));
         query.setName("externalQuery");
         search.setName("externalSearch");
         cancel.setName("externalCancel");
         save.setName("externalImport");
+        saveLater.setName("externalSaveLater");
+        savedLater.setName("externalSavedDrafts");
+        removeDraft.setName("externalRemoveDraft");
         message.setName("externalStatus");
         results.setName("externalResults");
         review.setName("importIngredients");
@@ -79,7 +88,7 @@ public class RecipeImportPanel extends JPanel
         effort.setName("importEffort");
         JPanel top = new JPanel(new BorderLayout());
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        actions.add(query); actions.add(search); actions.add(cancel);
+        actions.add(query); actions.add(search); actions.add(cancel); actions.add(savedLater);
         top.add(actions, BorderLayout.NORTH);
         top.add(message, BorderLayout.SOUTH);
         add(top, BorderLayout.NORTH);
@@ -91,7 +100,7 @@ public class RecipeImportPanel extends JPanel
             new DefaultCellEditor(new JComboBox<Unit>(Unit.values())));
         JPanel editor = new JPanel(new BorderLayout(6, 6));
         editor.add(new JLabel("Review every row. Blank quantity/unit needs correction; "
-            + "count means whole items, not cloves or package sizes."), BorderLayout.NORTH);
+            + "use Save for later if you do not know an amount."), BorderLayout.NORTH);
         editor.add(new JScrollPane(review), BorderLayout.CENTER);
         instructions.setEditable(false);
         instructions.setLineWrap(true);
@@ -101,8 +110,13 @@ public class RecipeImportPanel extends JPanel
         JPanel metadata = new JPanel(new FlowLayout(FlowLayout.LEFT));
         metadata.add(new JLabel("Prep minutes (optional)")); metadata.add(prep);
         metadata.add(new JLabel("Cook minutes (optional)")); metadata.add(cook);
-        metadata.add(effort); metadata.add(save);
-        bottom.add(metadata, BorderLayout.SOUTH);
+        metadata.add(effort);
+        JPanel reviewActions = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        reviewActions.add(save); reviewActions.add(saveLater); reviewActions.add(removeDraft);
+        JPanel footer = new JPanel(new BorderLayout());
+        footer.add(metadata, BorderLayout.NORTH);
+        footer.add(reviewActions, BorderLayout.SOUTH);
+        bottom.add(footer, BorderLayout.SOUTH);
         editor.add(bottom, BorderLayout.SOUTH);
         JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
             new JScrollPane(results), editor);
@@ -110,11 +124,17 @@ public class RecipeImportPanel extends JPanel
         add(split, BorderLayout.CENTER);
         cancel.setEnabled(false);
         save.setEnabled(false);
+        saveLater.setEnabled(false);
+        removeDraft.setEnabled(false);
+        refreshSavedCount();
         effort.setSelectedItem(Effort.UNKNOWN);
         search.addActionListener(event -> startSearch());
         query.addActionListener(event -> { if (active == null) { startSearch(); } });
         cancel.addActionListener(event -> cancelSearch());
         save.addActionListener(event -> saveReviewed());
+        saveLater.addActionListener(event -> saveForLater());
+        savedLater.addActionListener(event -> showSavedDrafts());
+        removeDraft.addActionListener(event -> removeSavedDraft());
         results.getSelectionModel().addListSelectionListener(event ->
         {
             if (!event.getValueIsAdjusting()) { selectDraft(); }
@@ -130,8 +150,7 @@ public class RecipeImportPanel extends JPanel
             return;
         }
         cancelSearch();
-        results.clearSelection();
-        resultsModel.setRowCount(0);
+        clearResults();
         drafts = new RecipeImportDraft[0];
         message.setText("Searching TheMealDB...");
         search.setEnabled(false);
@@ -158,7 +177,8 @@ public class RecipeImportPanel extends JPanel
                     for (RecipeImportDraft draft : drafts)
                     {
                         resultsModel.addRow(new Object[] {
-                            draft.getName(), draft.getExternalId() });
+                            draft.getName(), draft.getExternalId(),
+                            resultStatus(draft.getExternalId()) });
                     }
                     message.setText(drafts.length == 0 ? "No recipes found. Try another name."
                         : "Select a recipe to review its measurements.");
@@ -209,20 +229,25 @@ public class RecipeImportPanel extends JPanel
         prep.setText(""); cook.setText("");
         effort.setSelectedItem(Effort.UNKNOWN);
         save.setEnabled(false);
+        saveLater.setEnabled(false);
+        removeDraft.setEnabled(false);
         int row = results.getSelectedRow();
         if (row < 0) { return; }
         selected = drafts[results.convertRowIndexToModel(row)];
-        String[] names = selected.getIngredientNames();
+        RecipeImportDraft saved = savedDraft(selected.getExternalId());
+        if (saved != null) { selected = saved; }
         String[] measures = selected.getMeasurements();
+        String[][] rows = selected.getReviewRows();
         int unresolved = 0;
-        for (int i = 0; i < names.length; i++)
+        for (int i = 0; i < rows.length; i++)
         {
-            Ingredient suggestion = RecipeImportDraft.parseMeasurement(names[i], measures[i]);
-            if (suggestion == null) { unresolved++; }
-            reviewModel.addRow(new Object[] { names[i], measures[i],
-                suggestion == null ? "" : Double.toString(suggestion.getQuantity()),
-                suggestion == null ? null : suggestion.getUnit() });
+            if (rows[i][1].isBlank() || rows[i][2].isBlank()) { unresolved++; }
+            reviewModel.addRow(new Object[] { rows[i][0], measures[i], rows[i][1],
+                rows[i][2].isEmpty() ? null : Unit.valueOf(rows[i][2]) });
         }
+        prep.setText(selected.getPrepText());
+        cook.setText(selected.getCookText());
+        effort.setSelectedItem(selected.getEffort());
         instructions.setText((selected.getInstructions().isBlank()
             ? "No cooking instructions supplied." : selected.getInstructions())
             + "\n\nRecipe data: TheMealDB - " + selected.getProviderUrl()
@@ -230,56 +255,146 @@ public class RecipeImportPanel extends JPanel
                 : "\nOriginal source: " + selected.getOriginalSource()));
         instructions.setCaretPosition(0);
         message.setText(unresolved + " measurement(s) need correction. "
-            + "Review names and amounts before importing. Times may stay blank.");
+            + "Review before importing, or Save for later. Times may stay blank.");
         save.setEnabled(true);
+        saveLater.setEnabled(true);
+        removeDraft.setEnabled(saved != null);
     }
 
-    private void saveReviewed()
+    /** Updates the saved-draft count after application loading or mutations. */
+    public void refreshSavedCount()
+    {
+        savedLater.setText("Saved for later (" + controller.getSavedDrafts().length + ")");
+        for (int i = 0; i < resultsModel.getRowCount(); i++)
+        {
+            String id = resultsModel.getValueAt(i, 1).toString();
+            resultsModel.setValueAt(resultStatus(id), i, 2);
+        }
+    }
+
+    private String resultStatus(String id)
+    {
+        if (savedDraft(id) != null) { return "Needs review"; }
+        for (Recipe recipe : controller.getSavedRecipes())
+        {
+            if (recipe.getExternalRecipeId().equals("themealdb:" + id))
+            {
+                return "In collection";
+            }
+        }
+        return "Not saved";
+    }
+
+    private void clearResults()
+    {
+        results.clearSelection();
+        results.getSelectionModel().setAnchorSelectionIndex(-1);
+        results.getSelectionModel().setLeadSelectionIndex(-1);
+        resultsModel.setRowCount(0);
+    }
+
+    private RecipeImportDraft savedDraft(String id)
+    {
+        for (RecipeImportDraft draft : controller.getSavedDrafts())
+        {
+            if (draft.getExternalId().equals(id)) { return draft; }
+        }
+        return null;
+    }
+
+    private void showSavedDrafts()
+    {
+        cancelSearch();
+        clearResults();
+        drafts = controller.getSavedDrafts();
+        for (RecipeImportDraft draft : drafts)
+        {
+            resultsModel.addRow(new Object[] { draft.getName(), draft.getExternalId(), "Needs review" });
+        }
+        refreshSavedCount();
+        message.setText(drafts.length == 0 ? "No recipes saved for later. Search to find one."
+            : "Saved for later: select a recipe to continue review. These recipes cannot be cooked yet.");
+    }
+
+    private RecipeImportDraft captureReview()
+    {
+        if (review.isEditing() && !review.getCellEditor().stopCellEditing())
+        {
+            throw new IllegalArgumentException("Finish the active edit before saving.");
+        }
+        String[][] rows = new String[reviewModel.getRowCount()][3];
+        for (int i = 0; i < rows.length; i++)
+        {
+            Object name = reviewModel.getValueAt(i, 0);
+            Object quantity = reviewModel.getValueAt(i, 2);
+            Object unit = reviewModel.getValueAt(i, 3);
+            rows[i][0] = name == null ? "" : name.toString();
+            rows[i][1] = quantity == null ? "" : quantity.toString();
+            rows[i][2] = unit instanceof Unit ? ((Unit)unit).name() : "";
+        }
+        return selected.withReview(rows, prep.getText(), cook.getText(),
+            (Effort)effort.getSelectedItem());
+    }
+
+    private void saveForLater()
     {
         if (selected == null) { return; }
-        if (review.isEditing() && !review.getCellEditor().stopCellEditing()) { return; }
         try
         {
-            Ingredient[] ingredients = new Ingredient[reviewModel.getRowCount()];
-            for (int i = 0; i < ingredients.length; i++)
-            {
-                try
-                {
-                    Object unit = reviewModel.getValueAt(i, 3);
-                    ingredients[i] = new Ingredient(UUID.randomUUID().toString(),
-                        String.valueOf(reviewModel.getValueAt(i, 0)).strip(),
-                        Double.parseDouble(String.valueOf(reviewModel.getValueAt(i, 2)).strip()),
-                        unit instanceof Unit ? (Unit)unit : null);
-                }
-                catch (IllegalArgumentException exception)
-                {
-                    throw new IllegalArgumentException("Row " + (i + 1)
-                        + ": enter a name, positive quantity, and unit.", exception);
-                }
-            }
-            Recipe recipe = selected.toRecipe(ingredients, minutes(prep), minutes(cook),
-                (Effort)effort.getSelectedItem());
-            importRecipe.accept(recipe);
+            RecipeImportDraft snapshot = captureReview();
+            controller.saveRecipeDraft(snapshot);
+            selected = snapshot;
+            removeDraft.setEnabled(true);
+            refreshSavedCount();
+            String notice = "Saved for later" + (controller.isPersistenceEnabled()
+                ? "." : " in this session.")
+                + " Your edits were kept. Open Saved for later to resume review.";
+            message.setText(notice);
+            feedback.accept(notice, false);
         }
-        catch (IllegalArgumentException exception)
+        catch (IOException exception) { saveFailure(exception); }
+        catch (IllegalArgumentException | IllegalStateException exception)
         {
             message.setText(exception.getMessage());
         }
     }
 
-    private static Integer minutes(JTextField field)
+    private void removeSavedDraft()
     {
-        if (field.getText().isBlank()) { return null; }
+        if (selected == null) { return; }
         try
         {
-            int value = Integer.parseInt(field.getText().strip());
-            if (value < 0) { throw new NumberFormatException(); }
-            return value;
+            controller.removeRecipeDraft(selected.getExternalId());
+            showSavedDrafts();
+            feedback.accept("Saved draft removed.", false);
         }
-        catch (NumberFormatException exception)
+        catch (IOException exception)
         {
-            throw new IllegalArgumentException("Times must be nonnegative whole minutes or blank.",
-                exception);
+            showSavedDrafts();
+            saveFailure(exception);
         }
+        catch (IllegalStateException exception) { message.setText(exception.getMessage()); }
+    }
+
+    private void saveFailure(IOException exception)
+    {
+        refreshSavedCount();
+        removeDraft.setEnabled(selected != null && savedDraft(selected.getExternalId()) != null);
+        String notice = "Could not save: " + exception.getMessage()
+            + " Changes remain in this session. Click Save now to retry before closing.";
+        message.setText(notice);
+        feedback.accept(notice, true);
+    }
+
+    private void saveReviewed()
+    {
+        if (selected == null) { return; }
+        try
+        {
+            importRecipe.accept(captureReview().toRecipe());
+            refreshSavedCount();
+            removeDraft.setEnabled(savedDraft(selected.getExternalId()) != null);
+        }
+        catch (IllegalArgumentException exception) { message.setText(exception.getMessage()); }
     }
 }

@@ -52,6 +52,47 @@ public class PantryPalDataTest extends TestCase
     }
 
 
+    /** Partial review edits are immutable and cannot bypass recipe validation. */
+    public void testPartialReviewOwnershipAndValidation()
+    {
+        RecipeImportDraft original = new RecipeImportDraft("42", "Bean soup",
+            new String[] { "Beans" }, new String[] { "1 tin" }, "Heat.", "");
+        String[][] edits = { { "Black beans", "not sure", "" } };
+        RecipeImportDraft edited = original.withReview(edits, "later", "", Effort.UNKNOWN);
+        edits[0][0] = "Changed";
+        edited.getReviewRows()[0][1] = "Changed";
+        assertEquals("Black beans", edited.getReviewRows()[0][0]);
+        assertEquals("not sure", edited.getReviewRows()[0][1]);
+        assertEquals("Beans", original.getReviewRows()[0][0]);
+        assertEquals("1 tin", edited.getMeasurements()[0]);
+        TestFixtures.invalid(() -> edited.toRecipe());
+        TestFixtures.invalid(() -> original.withReview(null, "", "", Effort.UNKNOWN));
+        TestFixtures.invalid(() -> original.withReview(new String[0][3], "", "", Effort.UNKNOWN));
+        RecipeImportDraft ready = original.withReview(
+            new String[][] { { "Beans", "200", "GRAM" } }, "", "", Effort.UNKNOWN);
+        assertEquals(200.0, ready.toRecipe().getRequiredIngredients()[0].getQuantity(), 0.0);
+        assertNull(ready.toRecipe().getCookTimeMinutes());
+        TestFixtures.invalid(() -> ready.withReview(ready.getReviewRows(), "later", "",
+            Effort.UNKNOWN).toRecipe());
+    }
+
+    /** Snapshot arrays cannot change saved drafts, and duplicate IDs are invalid. */
+    public void testDraftSnapshotOwnershipAndDuplicateIds()
+    {
+        RecipeImportDraft draft = new RecipeImportDraft("42", "Beans",
+            new String[] { "Beans" }, new String[] { "1 tin" }, "", "");
+        RecipeImportDraft[] drafts = { draft };
+        PantryPalData snapshot = new PantryPalData(new Ingredient[0], new Recipe[0], drafts);
+        drafts[0] = null;
+        snapshot.getSavedDrafts()[0] = null;
+        assertEquals("42", snapshot.getSavedDrafts()[0].getExternalId());
+        TestFixtures.invalid(() -> new PantryPalData(new Ingredient[0], new Recipe[0], null));
+        TestFixtures.invalid(() -> new PantryPalData(new Ingredient[0], new Recipe[0],
+            new RecipeImportDraft[] { null }));
+        TestFixtures.invalid(() -> new PantryPalData(new Ingredient[0], new Recipe[0],
+            new RecipeImportDraft[] { draft, draft }));
+    }
+
     /** Null collections/entries and duplicate IDs are rejected. */
     public void testInvalidSnapshots()
     {
